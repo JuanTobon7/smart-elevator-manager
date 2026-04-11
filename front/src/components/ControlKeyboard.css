@@ -1,0 +1,535 @@
+.control-keyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Botones de Pisos */
+.floor-buttons {
+  flex: 1;
+}
+
+.floor-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+}
+
+.floor-button {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #404656 0%, #3d4656 100%);
+  color: #e2e8f0;
+  font-weight: 700;
+  font-size: 1.5rem;
+  font-family: 'JetBrains Mono', monospace;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  overflow: hidden;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 4px 12px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.floor-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(37, 99, 235, 0.5);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 6px 16px rgba(37, 99, 235, 0.2),
+    0 0 20px rgba(37, 99, 235, 0.2);
+  background: linear-gradient(135deg, #4a5a70 0%, #495561 100%);
+}
+
+.floor-button:active:not(:disabled) {
+  transform: translateY(1px);
+  box-shadow: 
+    inset 0 2px 6px rgba(0, 0, 0, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.floor-button.requested {
+  background: linear-gradient(135deg, rgba(132, 204, 22, 0.6) 0%, rgba(132, 204, 22, 0.4) 100%);
+  border-color: var(--accent-success);
+  color: #ffffff;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.2),
+    0 0 15px rgba(132, 204, 22, 0.4),
+    0 0 30px rgba(132, 204, 22, 0.2);
+  animation: buttonPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes buttonPulse {
+  0%, 100% {
+    box-shadow: 
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 0 15px rgba(132, 204, 22, 0.4),
+      0 0 30px rgba(132, 204, 22, 0.2);
+  }
+  50% {
+    box-shadow: 
+      inset 0 1px 0 rgba(255, 255, 255, 0.2),
+      0 0 25px rgba(132, 204, 22, 0.6),
+      0 0 40px rgba(132, 204, 22, 0.3);
+  }
+}
+
+.floor-button.pressed {
+  animation: buttonPress 0.2s ease-out;
+}
+
+@keyframes buttonPress {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(0.9);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.floor-button.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.button-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 0;
+  height: 0;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.3), transparent);
+  border-radius: 50%;
+  z-index: 0;
+}
+
+.floor-button:hover:not(:disabled) .button-glow {
+  animation: glowExpand 0.6s ease-out;
+}
+
+@keyframes glowExpand {
+  0% {
+    width: 0;
+    height: 0;
+  }
+  100% {
+    width: 100px;
+    height: 100px;
+  }
+}
+
+.button-shadow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: radial-gradient(ellipse at 30% 30%, rgba(255, 255, 255, 0.2), transparent);
+  border-radius: 12px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.button-text {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.button-indicator {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+  animation: indicatorBlink 0.8s ease-in-out infinite;
+}
+
+@keyframes indicatorBlink {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+  }
+  50% {
+    opacity: 0.3;
+    box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);
+  }
+}
+
+/* Botones de Acción */
+.action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.action-button {
+  position: relative;
+  padding: 1rem;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-radius: 12px;
+  background: linear-gradient(135deg, #404656 0%, #3d4656 100%);
+  color: #e2e8f0;
+  font-weight: 600;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  overflow: hidden;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 4px 12px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 6px 16px rgba(0, 0, 0, 0.2);
+}
+
+.action-button:active {
+  transform: translateY(1px);
+  box-shadow: 
+    inset 0 2px 6px rgba(0, 0, 0, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.action-button.pressed {
+  animation: buttonPress 0.2s ease-out;
+}
+
+.open-button {
+  background: linear-gradient(135deg, rgba(132, 204, 22, 0.4) 0%, rgba(132, 204, 22, 0.2) 100%);
+  border-color: rgba(132, 204, 22, 0.5);
+  color: #84cc16;
+}
+
+.open-button:hover {
+  background: linear-gradient(135deg, rgba(132, 204, 22, 0.6) 0%, rgba(132, 204, 22, 0.4) 100%);
+  border-color: var(--accent-success);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 20px rgba(132, 204, 22, 0.3);
+}
+
+.open-button.active {
+  background: linear-gradient(135deg, rgba(132, 204, 22, 0.7) 0%, rgba(132, 204, 22, 0.5) 100%);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 25px rgba(132, 204, 22, 0.5),
+    0 0 40px rgba(132, 204, 22, 0.2);
+  animation: actionGlow 1.5s ease-in-out infinite;
+}
+
+.close-button {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.4) 0%, rgba(37, 99, 235, 0.2) 100%);
+  border-color: rgba(37, 99, 235, 0.5);
+  color: #3b82f6;
+}
+
+.close-button:hover {
+  background: linear-gradient(135deg, rgba(37, 99, 235, 0.6) 0%, rgba(37, 99, 235, 0.4) 100%);
+  border-color: var(--primary-light);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 0 20px rgba(37, 99, 235, 0.3);
+}
+
+@keyframes actionGlow {
+  0%, 100% {
+    box-shadow: 
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 0 20px rgba(132, 204, 22, 0.4),
+      0 0 35px rgba(132, 204, 22, 0.2);
+  }
+  50% {
+    box-shadow: 
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 0 30px rgba(132, 204, 22, 0.5),
+      0 0 50px rgba(132, 204, 22, 0.3);
+  }
+}
+
+.action-glow,
+.action-shadow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.action-glow {
+  background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.1), transparent);
+  z-index: 0;
+}
+
+.action-shadow {
+  background: radial-gradient(ellipse at 30% 30%, rgba(255, 255, 255, 0.1), transparent);
+  z-index: 0;
+}
+
+.action-text {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+}
+
+.action-icon {
+  font-size: 1.2rem;
+}
+
+/* Botón de Emergencia */
+.emergency-section {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.emergency-button {
+  flex: 1;
+  position: relative;
+  padding: 1rem;
+  border: 2px solid var(--accent-danger);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.3) 0%, rgba(239, 68, 68, 0.15) 100%);
+  color: var(--accent-danger);
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all var(--transition-base);
+  overflow: hidden;
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 4px 12px rgba(239, 68, 68, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  animation: emergencyBreathe 2s ease-in-out infinite;
+}
+
+@keyframes emergencyBreathe {
+  0%, 100% {
+    box-shadow: 
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 4px 12px rgba(239, 68, 68, 0.2),
+      0 0 20px rgba(239, 68, 68, 0.1);
+  }
+  50% {
+    box-shadow: 
+      inset 0 1px 0 rgba(255, 255, 255, 0.1),
+      0 4px 12px rgba(239, 68, 68, 0.4),
+      0 0 40px rgba(239, 68, 68, 0.2);
+  }
+}
+
+.emergency-button:hover {
+  transform: translateY(-2px);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.5) 0%, rgba(239, 68, 68, 0.3) 100%);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    0 6px 20px rgba(239, 68, 68, 0.4),
+    0 0 30px rgba(239, 68, 68, 0.3);
+}
+
+.emergency-button:active {
+  transform: translateY(1px);
+  box-shadow: 
+    inset 0 2px 6px rgba(0, 0, 0, 0.3),
+    0 2px 4px rgba(239, 68, 68, 0.2);
+}
+
+.emergency-button.pressed {
+  animation: emergencyAlert 0.3s ease-out;
+}
+
+@keyframes emergencyAlert {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.emergency-glow,
+.emergency-shadow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  pointer-events: none;
+}
+
+.emergency-glow {
+  background: radial-gradient(ellipse at center, rgba(239, 68, 68, 0.2), transparent);
+  z-index: 0;
+  animation: glowPulseEmergency 1.5s ease-in-out infinite;
+}
+
+@keyframes glowPulseEmergency {
+  0%, 100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.emergency-shadow {
+  background: radial-gradient(ellipse at 30% 30%, rgba(255, 255, 255, 0.1), transparent);
+  z-index: 0;
+}
+
+.emergency-text {
+  position: relative;
+  z-index: 1;
+}
+
+/* Estado del Teclado */
+.keyboard-status {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.status-badge {
+  padding: 0.4rem 0.8rem;
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.status-badge.moving {
+  background: rgba(37, 99, 235, 0.1);
+  color: #3b82f6;
+  border-color: rgba(37, 99, 235, 0.3);
+  animation: badgeBlink 1.5s ease-in-out infinite;
+}
+
+.status-badge.open {
+  background: rgba(132, 204, 22, 0.1);
+  color: #84cc16;
+  border-color: rgba(132, 204, 22, 0.3);
+  animation: badgePulse 1s ease-in-out infinite;
+}
+
+.status-badge.queue {
+  background: rgba(249, 115, 22, 0.1);
+  color: #f97316;
+  border-color: rgba(249, 115, 22, 0.3);
+}
+
+@keyframes badgeBlink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes badgePulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(132, 204, 22, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(132, 204, 22, 0);
+  }
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .floor-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.5rem;
+    padding: 0.75rem;
+  }
+
+  .floor-button {
+    width: 50px;
+    height: 50px;
+    font-size: 1.25rem;
+  }
+
+  .action-buttons {
+    gap: 0.5rem;
+  }
+
+  .action-button {
+    padding: 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .action-text {
+    gap: 0.25rem;
+    font-size: 0.75rem;
+  }
+
+  .action-icon {
+    display: none;
+  }
+
+  .emergency-button {
+    padding: 0.75rem;
+    font-size: 0.8rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .floor-grid {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 0.4rem;
+    padding: 0.5rem;
+  }
+
+  .floor-button {
+    width: 45px;
+    height: 45px;
+    font-size: 1.1rem;
+  }
+
+  .action-buttons {
+    grid-template-columns: 1fr;
+  }
+}
