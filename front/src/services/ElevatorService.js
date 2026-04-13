@@ -145,19 +145,27 @@ class ElevatorService {
 
     const handleUpdate = (event) => {
       try {
-        let data = JSON.parse(event.data)
-        console.log('SSE update received:', data)
-        // Transformar si viene del API con estructura antigua
-        if (data.elevatorId) {
-          data = this.transformElevator(data)
+        const parsedData = JSON.parse(event.data)
+        console.log(`[SSE] Evento recibido: ${event.type}`, parsedData)
+        
+        let elevatorData = parsedData
+
+        // Según tu backend (ElevatorEventDTO), la info del elevador viene dentro de "state"
+        if (parsedData.state) {
+          elevatorData = parsedData.state
+          // Aseguramos que tenga el ID en caso de que el DTO 'state' no lo incluya
+          if (!elevatorData.elevatorId) {
+            elevatorData.elevatorId = parsedData.elevatorId
+          }
+        } else if (parsedData.data) {
+          // Por si acaso viene envuelto en "data" (compatibilidad)
+          elevatorData = parsedData.data
         }
 
-        // Si viene wrapped en { data: {...} }
-        if (data.data && data.data.elevatorId) {
-          data = this.transformElevator(data.data)
-        }
+        // Transformamos los datos y los enviamos a App.jsx
+        const transformedData = this.transformElevator(elevatorData)
+        callback(transformedData)
 
-        callback(data)
       } catch (error) {
         console.error('Error parsing SSE data:', error)
       }
@@ -172,6 +180,15 @@ class ElevatorService {
       }, 3000)
     }
 
+    // --- AQUÍ SE ESCUCHAN LOS EVENTOS DEL BACK ---
+    eventSource.addEventListener('MOVING', handleUpdate)
+    eventSource.addEventListener('ARRIVED', handleUpdate)
+    eventSource.addEventListener('DOOR_OPENED', handleUpdate)
+    eventSource.addEventListener('DOOR_CLOSED', handleUpdate)
+    eventSource.addEventListener('RESET', handleUpdate)
+    eventSource.addEventListener('ERROR', handleUpdate)
+
+    // Listener genérico y de errores
     eventSource.onmessage = handleUpdate
     eventSource.onerror = handleError
 

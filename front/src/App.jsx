@@ -36,7 +36,8 @@ function App() {
 
     const unsubscribe = ElevatorService.subscribeToElevatorUpdates(
       selectedElevatorId,
-      (updatedElevator) => {
+        (updatedElevator) => {
+        console.log("¡Llegó un evento del servidor!", updatedElevator)
         setSelectedElevator(updatedElevator)
         // Actualizar en la lista también
         setElevators(prevs =>
