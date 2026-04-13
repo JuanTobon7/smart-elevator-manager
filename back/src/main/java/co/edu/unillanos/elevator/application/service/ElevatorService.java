@@ -35,7 +35,7 @@ public class ElevatorService implements ElevatorUseCase {
             hardwarePort.moveToFloor(floor);
             
             // Simular llegada
-            Thread.sleep(500 * Math.abs(elevator.getTargetFloor() - elevator.getCurrentFloor()));
+            Thread.sleep(1000 * Math.abs(elevator.getTargetFloor() - elevator.getCurrentFloor()));
             elevator.arriveAtFloor();
             
             SensorReading reading = elevator.readSensors();

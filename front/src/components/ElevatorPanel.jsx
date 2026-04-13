@@ -22,6 +22,22 @@ function ElevatorPanel({ elevator, onRequestFloor, onOpenDoor, onCloseDoor }) {
     setDoorState(elevator.status === 'DOOR_OPEN' ? 'open' : 'closed')
   }, [elevator.status])
 
+  // Limpiar pisos solicitados cuando cambia el elevador seleccionado
+  useEffect(() => {
+    setRequestedFloors([])
+  }, [elevator.id])
+
+  // Limpiar pisos solicitados cuando el elevador llega a su destino
+  useEffect(() => {
+    if (elevator.destinationFloor !== null && elevator.currentFloor === elevator.destinationFloor) {
+      // El elevador llegó a su piso destino - limpiar pisos solicitados
+      setRequestedFloors(prev => {
+        const updated = prev.filter(floor => floor !== elevator.currentFloor)
+        return updated
+      })
+    }
+  }, [elevator.currentFloor])
+
   const handleFloorRequest = (floor) => {
     if (!requestedFloors.includes(floor)) {
       setRequestedFloors(prev => [...prev, floor])

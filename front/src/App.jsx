@@ -30,28 +30,40 @@ function App() {
     fetchElevators()
   }, [])
 
-  // Conectarse a SSE para actualizaciones en tiempo real
+  // Suscribirse a TODOS los elevadores
+  useEffect(() => {
+    if (elevators.length === 0) return
+
+    const unsubscribers = elevators.map(elevator =>
+      ElevatorService.subscribeToElevatorUpdates(
+        elevator.id,
+        (updatedElevator) => {
+          console.log("¡Llegó un evento del servidor!", updatedElevator)
+          // Actualizar en la lista de elevadores
+          setElevators(prevs =>
+            prevs.map(e => e.id === updatedElevator.id ? updatedElevator : e)
+          )
+          // Si es el elevador seleccionado, actualizar también selectedElevator
+          setSelectedElevator(prev => 
+            prev?.id === updatedElevator.id ? updatedElevator : prev
+          )
+        }
+      )
+    )
+
+    // Cleanup: desuscribirse de todos al desmontar
+    return () => {
+      unsubscribers.forEach(unsubscribe => unsubscribe?.())
+    }
+  }, [elevators.length])
+
+  // Al cambiar elevador seleccionado, cargar su estado actual
   useEffect(() => {
     if (!selectedElevatorId) return
 
-    const unsubscribe = ElevatorService.subscribeToElevatorUpdates(
-      selectedElevatorId,
-        (updatedElevator) => {
-        console.log("¡Llegó un evento del servidor!", updatedElevator)
-        setSelectedElevator(updatedElevator)
-        // Actualizar en la lista también
-        setElevators(prevs =>
-          prevs.map(e => e.id === updatedElevator.id ? updatedElevator : e)
-        )
-      }
-    )
-
-    // Cargar estado inicial
     ElevatorService.getElevatorById(selectedElevatorId).then(data => {
       setSelectedElevator(data)
     })
-
-    return unsubscribe
   }, [selectedElevatorId])
 
   const handleSelectElevator = (elevatorId) => {

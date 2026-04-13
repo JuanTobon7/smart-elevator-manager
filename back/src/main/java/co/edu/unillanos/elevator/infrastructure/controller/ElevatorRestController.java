@@ -9,6 +9,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.apache.catalina.connector.ClientAbortException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,6 +19,7 @@ import co.edu.unillanos.elevator.infrastructure.event.SseElevatorEventListener;
 import co.edu.unillanos.elevator.domain.exception.ElevatorException;
 import co.edu.unillanos.elevator.domain.model.Elevator;
 
+import java.io.IOException;
 import java.util.Map;
 
 /**
@@ -195,53 +197,47 @@ public class ElevatorRestController {
     @GetMapping(value = "/{id}/subscribe", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter subscribeToElevator(@PathVariable String id) {
         log.info("Cliente suscrito a eventos del elevador: {}", id);
-        
-        // Crear el emitter con timeout de 30 minutos
+
         SseEmitter emitter = new SseEmitter(30 * 60 * 1000L);
-        
-        // Crear el listener SSE
-        SseElevatorEventListener listener = new SseElevatorEventListener(emitter, id);
-        
-        // Suscribir el listener al broadcaster
-        eventBroadcaster.subscribe(listener);
-        
-        // Enviar evento inicial de conexión
+
+        // Verificar que el elevador existe ANTES de suscribir
+        ElevatorStateDTO initialState;
         try {
-            ElevatorStateDTO initialState = elevatorManager.getElevatorState(id);
-            SseEmitter.SseEventBuilder event = SseEmitter.event()
+            initialState = elevatorManager.getElevatorState(id);
+        } catch (ElevatorException e) {
+            log.error("Elevador no encontrado al suscribir: {}", id);
+            emitter.completeWithError(e); // rechaza la conexión limpiamente
+            return emitter;
+        }
+
+        SseElevatorEventListener listener = new SseElevatorEventListener(emitter, id);
+        eventBroadcaster.subscribe(listener);
+
+        // Ahora sí enviar estado inicial (elevador garantizado que existe)
+        try {
+            emitter.send(SseEmitter.event()
                     .id(System.currentTimeMillis() + "")
                     .name("CONNECTED")
                     .data(initialState)
-                    .reconnectTime(5000);
-            emitter.send(event);
+                    .reconnectTime(5000));
         } catch (Exception e) {
             log.error("Error enviando evento inicial para elevador {}: {}", id, e.getMessage());
         }
-        
-        // Manejar el cierre de la conexión
-        emitter.onCompletion(() -> {
-            log.info("Conexión SSE completada para elevador: {}", id);
-            eventBroadcaster.unsubscribe(listener);
-        });
-        
-        emitter.onTimeout(() -> {
-            log.info("Conexión SSE expirada para elevador: {}", id);
-            eventBroadcaster.unsubscribe(listener);
-        });
-        
+
+        emitter.onCompletion(() -> eventBroadcaster.unsubscribe(listener));
+        emitter.onTimeout(() -> eventBroadcaster.unsubscribe(listener));
         emitter.onError(throwable -> {
-            // Diferenciar entre desconexiones normales y errores reales
-            if (throwable instanceof org.apache.catalina.connector.ClientAbortException || 
-                (throwable.getCause() instanceof java.io.IOException && 
-                 throwable.getCause().getMessage() != null && 
-                 throwable.getCause().getMessage().contains("anulado"))) {
+            if (throwable instanceof ClientAbortException ||
+                (throwable.getCause() instanceof IOException && 
+                throwable.getCause().getMessage() != null &&
+                throwable.getCause().getMessage().contains("anulado"))) {
                 log.debug("Cliente SSE desconectado para elevador: {}", id);
             } else {
                 log.error("Error en conexión SSE para elevador {}: {}", id, throwable.getMessage());
             }
             eventBroadcaster.unsubscribe(listener);
         });
-        
+
         return emitter;
     }
 }
