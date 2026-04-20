@@ -88,40 +88,49 @@ public class ElevatorManager {
     
     /**
      * Obtiene el estado de un elevador específico
+     * Si no existe, lo crea automáticamente
      */
     public ElevatorStateDTO getElevatorState(String elevatorId) {
-        Elevator elevator = getElevator(elevatorId);
+        Elevator elevator = getOrCreateElevator(elevatorId);
         return ElevatorStateDTO.from(elevatorId, elevator);
     }
     
     /**
      * Mueve un elevador a un piso específico de forma asincrónica
+     * Si no existe, lo crea automáticamente
      */
     public CompletableFuture<ElevatorStateDTO> goToFloorAsync(String elevatorId, int targetFloor) {
+        getOrCreateElevator(elevatorId);
         ElevatorAsyncService service = getAsyncService(elevatorId);
         return service.goToFloorAsync(targetFloor);
     }
     
     /**
      * Abre la puerta de un elevador de forma asincrónica
+     * Si no existe, lo crea automáticamente
      */
     public CompletableFuture<ElevatorStateDTO> openDoorAsync(String elevatorId) {
+        getOrCreateElevator(elevatorId);
         ElevatorAsyncService service = getAsyncService(elevatorId);
         return service.openDoorAsync();
     }
     
     /**
      * Cierra la puerta de un elevador de forma asincrónica
+     * Si no existe, lo crea automáticamente
      */
     public CompletableFuture<ElevatorStateDTO> closeDoorAsync(String elevatorId) {
+        getOrCreateElevator(elevatorId);
         ElevatorAsyncService service = getAsyncService(elevatorId);
         return service.closeDoorAsync();
     }
     
     /**
      * Reinicia un elevador de forma asincrónica
+     * Si no existe, lo crea automáticamente
      */
     public CompletableFuture<ElevatorStateDTO> resetAsync(String elevatorId) {
+        getOrCreateElevator(elevatorId);
         ElevatorAsyncService service = getAsyncService(elevatorId);
         return service.resetAsync();
     }

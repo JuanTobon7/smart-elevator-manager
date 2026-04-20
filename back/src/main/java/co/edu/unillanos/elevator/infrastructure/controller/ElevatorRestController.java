@@ -39,7 +39,6 @@ public class ElevatorRestController {
     private final ElevatorManager elevatorManager;
     private final ElevatorEventBroadcaster eventBroadcaster;
     
-    @Autowired
     public ElevatorRestController(ElevatorManager elevatorManager, ElevatorEventBroadcaster eventBroadcaster) {
         this.elevatorManager = elevatorManager;
         this.eventBroadcaster = eventBroadcaster;
