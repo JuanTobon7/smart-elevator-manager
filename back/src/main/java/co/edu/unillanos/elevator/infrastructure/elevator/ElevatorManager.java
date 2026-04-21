@@ -1,7 +1,10 @@
 package co.edu.unillanos.elevator.infrastructure.elevator;
 
+import co.edu.unillanos.elevator.application.port.out.ElevatorManagementPort;
+import co.edu.unillanos.elevator.domain.exception.ElevatorException;
 import co.edu.unillanos.elevator.domain.model.Elevator;
 import co.edu.unillanos.elevator.infrastructure.dto.ElevatorStateDTO;
+import co.edu.unillanos.elevator.infrastructure.factory.ElevatorOrchestratorFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -15,11 +18,12 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Gestor de múltiples elevadores.
- * Mantiene el registro de elevadores y delega su creación a una factoría/orquestación dedicada.
+ * Gestor de multiples elevadores.
+ * Mantiene el registro de elevadores y delega su creacion a una factoria/orquestacion dedicada.
+ * Implementa el puerto de salida ElevatorManagementPort.
  */
 @Component
-public class ElevatorManager {
+public class ElevatorManager implements ElevatorManagementPort {
     private static final Logger log = LoggerFactory.getLogger(ElevatorManager.class);
 
     private final Map<String, ElevatorOrchestrator> orchestrators = new ConcurrentHashMap<>();

@@ -1,11 +1,11 @@
 package co.edu.unillanos.elevator.infrastructure.controller;
 
+import co.edu.unillanos.elevator.application.port.out.ElevatorEventBroadcasterPort;
+import co.edu.unillanos.elevator.application.port.out.ElevatorManagementPort;
 import co.edu.unillanos.elevator.domain.exception.ElevatorException;
 import co.edu.unillanos.elevator.infrastructure.dto.ElevatorStateDTO;
 import co.edu.unillanos.elevator.infrastructure.dto.GenericResponseDTO;
 import co.edu.unillanos.elevator.infrastructure.dto.RequestFloorDTO;
-import co.edu.unillanos.elevator.infrastructure.elevator.ElevatorManager;
-import co.edu.unillanos.elevator.infrastructure.event.ElevatorEventBroadcaster;
 import co.edu.unillanos.elevator.infrastructure.event.SseElevatorEventListener;
 import org.apache.catalina.connector.ClientAbortException;
 import org.slf4j.Logger;
@@ -27,6 +27,7 @@ import java.util.Map;
 
 /**
  * REST Controller para el API de elevadores.
+ * Depende de interfaces (puertos) en lugar de implementaciones concretas.
  */
 @RestController
 @RequestMapping("/api/elevators")
@@ -34,12 +35,14 @@ import java.util.Map;
 public class ElevatorRestController {
     private static final Logger log = LoggerFactory.getLogger(ElevatorRestController.class);
 
-    private final ElevatorManager elevatorManager;
-    private final ElevatorEventBroadcaster eventBroadcaster;
+    private final ElevatorManagementPort elevatorManagementPort;
+    private final ElevatorEventBroadcasterPort eventBroadcasterPort;
 
-    public ElevatorRestController(ElevatorManager elevatorManager, ElevatorEventBroadcaster eventBroadcaster) {
-        this.elevatorManager = elevatorManager;
-        this.eventBroadcaster = eventBroadcaster;
+    public ElevatorRestController(
+            ElevatorManagementPort elevatorManagementPort,
+            ElevatorEventBroadcasterPort eventBroadcasterPort) {
+        this.elevatorManagementPort = elevatorManagementPort;
+        this.eventBroadcasterPort = eventBroadcasterPort;
     }
 
     @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
@@ -47,13 +50,13 @@ public class ElevatorRestController {
         try {
             log.info("Obteniendo estado de todos los elevadores");
 
-            if (elevatorManager.getAllElevators().isEmpty()) {
+            if (elevatorManagementPort.getAllElevators().isEmpty()) {
                 for (int i = 1; i <= 3; i++) {
-                    elevatorManager.getOrCreateElevator("elev-" + i);
+                    elevatorManagementPort.getOrCreateElevator("elev-" + i);
                 }
             }
 
-            Map<String, ElevatorStateDTO> states = elevatorManager.getAllElevatorStates();
+            Map<String, ElevatorStateDTO> states = elevatorManagementPort.getAllElevatorStates();
             return ResponseEntity.ok(GenericResponseDTO.ok(states, "Elevadores obtenidos exitosamente"));
         } catch (Exception e) {
             log.error("Error obteniendo elevadores: {}", e.getMessage(), e);
@@ -67,7 +70,7 @@ public class ElevatorRestController {
         try {
             log.info("Obteniendo elevador: {}", id);
 
-            ElevatorStateDTO state = elevatorManager.getElevatorState(id);
+            ElevatorStateDTO state = elevatorManagementPort.getElevatorState(id);
             return ResponseEntity.ok(GenericResponseDTO.ok(state, "Elevador obtenido exitosamente"));
         } catch (Exception e) {
             log.error("Error obteniendo elevador {}: {}", id, e.getMessage(), e);
@@ -84,14 +87,14 @@ public class ElevatorRestController {
         try {
             log.info("Solicitando movimiento del elevador {} al piso: {}", id, request.getFloor());
 
-            elevatorManager.goToFloorAsync(id, request.getFloor())
+            elevatorManagementPort.goToFloorAsync(id, request.getFloor())
                     .thenAccept(state -> log.info("Elevador {} llegó al piso {}", id, request.getFloor()))
                     .exceptionally(ex -> {
                         log.error("Error en movimiento de elevador {}: {}", id, ex.getMessage());
                         return null;
                     });
 
-            ElevatorStateDTO state = elevatorManager.getElevatorState(id);
+            ElevatorStateDTO state = elevatorManagementPort.getElevatorState(id);
             return ResponseEntity.accepted().body(
                     GenericResponseDTO.ok(state, "Solicitud de movimiento aceptada")
             );
@@ -111,13 +114,13 @@ public class ElevatorRestController {
         try {
             log.info("Abriendo puerta del elevador: {}", id);
 
-            elevatorManager.openDoorAsync(id)
+            elevatorManagementPort.openDoorAsync(id)
                     .exceptionally(ex -> {
                         log.error("Error abriendo puerta de {}: {}", id, ex.getMessage());
                         return null;
                     });
 
-            ElevatorStateDTO state = elevatorManager.getElevatorState(id);
+            ElevatorStateDTO state = elevatorManagementPort.getElevatorState(id);
             return ResponseEntity.accepted().body(
                     GenericResponseDTO.ok(state, "Solicitud para abrir puerta aceptada")
             );
@@ -137,13 +140,13 @@ public class ElevatorRestController {
         try {
             log.info("Cerrando puerta del elevador: {}", id);
 
-            elevatorManager.closeDoorAsync(id)
+            elevatorManagementPort.closeDoorAsync(id)
                     .exceptionally(ex -> {
                         log.error("Error cerrando puerta de {}: {}", id, ex.getMessage());
                         return null;
                     });
 
-            ElevatorStateDTO state = elevatorManager.getElevatorState(id);
+            ElevatorStateDTO state = elevatorManagementPort.getElevatorState(id);
             return ResponseEntity.accepted().body(
                     GenericResponseDTO.ok(state, "Solicitud para cerrar puerta aceptada")
             );
@@ -166,7 +169,7 @@ public class ElevatorRestController {
 
         ElevatorStateDTO initialState;
         try {
-            initialState = elevatorManager.getElevatorState(id);
+            initialState = elevatorManagementPort.getElevatorState(id);
         } catch (ElevatorException e) {
             log.error("Elevador no encontrado al suscribir: {}", id);
             emitter.completeWithError(e);
@@ -174,7 +177,7 @@ public class ElevatorRestController {
         }
 
         SseElevatorEventListener listener = new SseElevatorEventListener(emitter, id);
-        eventBroadcaster.subscribe(listener);
+        eventBroadcasterPort.subscribe(listener);
 
         try {
             emitter.send(SseEmitter.event()
@@ -186,8 +189,8 @@ public class ElevatorRestController {
             log.error("Error enviando evento inicial para elevador {}: {}", id, e.getMessage());
         }
 
-        emitter.onCompletion(() -> eventBroadcaster.unsubscribe(listener));
-        emitter.onTimeout(() -> eventBroadcaster.unsubscribe(listener));
+        emitter.onCompletion(() -> eventBroadcasterPort.unsubscribe(listener));
+        emitter.onTimeout(() -> eventBroadcasterPort.unsubscribe(listener));
         emitter.onError(throwable -> {
             if (throwable instanceof ClientAbortException ||
                     (throwable.getCause() instanceof IOException &&
@@ -197,7 +200,7 @@ public class ElevatorRestController {
             } else {
                 log.error("Error en conexión SSE para elevador {}: {}", id, throwable.getMessage());
             }
-            eventBroadcaster.unsubscribe(listener);
+            eventBroadcasterPort.unsubscribe(listener);
         });
 
         return emitter;

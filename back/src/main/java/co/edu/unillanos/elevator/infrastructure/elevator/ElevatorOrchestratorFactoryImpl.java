@@ -5,6 +5,8 @@ import co.edu.unillanos.elevator.domain.model.Elevator;
 import co.edu.unillanos.elevator.infrastructure.adapter.ArduinoAdapter;
 import co.edu.unillanos.elevator.infrastructure.adapter.SimulatorAdapter;
 import co.edu.unillanos.elevator.infrastructure.event.ElevatorEventBroadcaster;
+import co.edu.unillanos.elevator.infrastructure.factory.ElevatorOrchestratorFactory;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -14,17 +16,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Crea orquestadores de elevador y decide el backend de hardware según la política actual.
+ * Crea orquestadores de elevador.
  */
 @Component
-public class ElevatorOrchestratorFactory {
-    private static final Logger log = LoggerFactory.getLogger(ElevatorOrchestratorFactory.class);
+public class ElevatorOrchestratorFactoryImpl implements ElevatorOrchestratorFactory {
+    private static final Logger log = LoggerFactory.getLogger(ElevatorOrchestratorFactoryImpl.class);
     private static final Pattern ELEVATOR_NUMBER_PATTERN = Pattern.compile("(\\d+)$");
 
     private final ElevatorEventBroadcaster eventBroadcaster;
     private final ObjectProvider<ArduinoAdapter> arduinoAdapterProvider;
 
-    public ElevatorOrchestratorFactory(
+    public ElevatorOrchestratorFactoryImpl(
             ElevatorEventBroadcaster eventBroadcaster,
             ObjectProvider<ArduinoAdapter> arduinoAdapterProvider
     ) {
@@ -32,6 +34,7 @@ public class ElevatorOrchestratorFactory {
         this.arduinoAdapterProvider = arduinoAdapterProvider;
     }
 
+    @Override
     public ElevatorOrchestrator create(String elevatorId) {
         HardwareSelection selection = selectHardware(elevatorId);
         log.info("Creando elevador {} con backend {}", elevatorId, selection.backendType());
@@ -52,7 +55,7 @@ public class ElevatorOrchestratorFactory {
         }
 
         if (isPrimaryElevator(elevatorId)) {
-            log.warn("Arduino no disponible para {}. Se usará simulación.", elevatorId);
+            log.warn("Arduino no disponible para {}. Se usara simulacion.", elevatorId);
         }
 
         return new HardwareSelection(new SimulatorAdapter(), "virtual");

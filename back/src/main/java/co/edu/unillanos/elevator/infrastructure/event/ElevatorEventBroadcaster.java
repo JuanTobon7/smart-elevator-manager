@@ -1,5 +1,6 @@
 package co.edu.unillanos.elevator.infrastructure.event;
 
+import co.edu.unillanos.elevator.application.port.out.ElevatorEventBroadcasterPort;
 import co.edu.unillanos.elevator.infrastructure.dto.ElevatorEventDTO;
 import org.springframework.stereotype.Component;
 import org.slf4j.Logger;
@@ -10,10 +11,11 @@ import java.io.IOException;
 
 /**
  * Broadcaster de eventos de elevadores usando observador pattern
- * Permite que múltiples clientes se suscriban a eventos en tiempo real via SSE
+ * Permite que multiples clientes se suscriban a eventos en tiempo real via SSE
+ * Implementa el puerto ElevatorEventBroadcasterPort para inversion de dependencias.
  */
 @Component
-public class ElevatorEventBroadcaster {
+public class ElevatorEventBroadcaster implements ElevatorEventBroadcasterPort {
     private static final Logger log = LoggerFactory.getLogger(ElevatorEventBroadcaster.class);
     
     private final List<ElevatorEventListener> listeners = new CopyOnWriteArrayList<>();

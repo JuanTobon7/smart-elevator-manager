@@ -1,0 +1,364 @@
+@startuml
+title Smart Elevator Manager - UML de clases
+
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam linetype ortho
+skinparam classAttributeIconSize 0
+
+hide empty members
+
+package "co.edu.unillanos.elevator" {
+  class ElevatorApplication
+}
+
+package "domain.enums" {
+  enum Direction {
+    UP
+    DOWN
+    NONE
+  }
+
+  enum DoorState {
+    OPEN
+    CLOSED
+    CLOSING
+  }
+
+  enum ElevatorState {
+    IDLE
+    MOVING
+    DOOR_OPEN
+    DOOR_CLOSING
+    ERROR
+  }
+}
+
+package "domain.exception" {
+  class ElevatorException
+}
+
+package "domain.model" {
+  class Elevator {
+    - currentFloor: int
+    - targetFloor: int
+    - state: ElevatorState
+    - direction: Direction
+    - door: Door
+    + goToFloor(floor: int): void
+    + arriveAtFloor(): void
+    + openDoor(): void
+    + closeDoor(): void
+    + completeDoorClosing(): void
+    + setError(reason: String): void
+    + reset(): void
+    + readSensors(): SensorReading
+  }
+
+  class Door {
+    - state: DoorState
+    + open(): void
+    + startClosing(): void
+    + close(): void
+    + isClosed(): boolean
+    + isOpen(): boolean
+  }
+
+  class Floor {
+    - number: int
+    + Floor(number: int)
+    + isValid(floorNumber: int): boolean
+  }
+
+  class SensorReading {
+    - floor: int
+    - doorState: DoorState
+    - elevatorState: ElevatorState
+  }
+}
+
+package "application.port.in" {
+  interface ElevatorUseCase {
+    + goToFloor(floor: int): void
+    + readSensors(): SensorReading
+    + reset(): void
+  }
+
+  interface DoorUseCase {
+    + open(): void
+    + close(): void
+  }
+}
+
+package "application.port.out" {
+  interface HardwarePort {
+    + executeCommand(command: String): void
+    + readState(): SensorReading
+    + moveToFloor(floor: int): void
+    + openDoor(): void
+    + closeDoor(): void
+    + reset(): void
+  }
+
+  interface EventLogger {
+    + logEvent(eventType: String, details: String, reading: SensorReading): void
+    + logError(errorMessage: String): void
+  }
+}
+
+package "application.service" {
+  class ElevatorService {
+    - elevator: Elevator
+    - hardwarePort: HardwarePort
+    - eventLogger: EventLogger
+    + goToFloor(floor: int): void
+    + readSensors(): SensorReading
+    + reset(): void
+  }
+
+  class DoorService {
+    - elevator: Elevator
+    - hardwarePort: HardwarePort
+    - eventLogger: EventLogger
+    + open(): void
+    + close(): void
+  }
+}
+
+package "infrastructure.adapter" {
+  class SimulatorAdapter {
+    - currentFloor: int
+    - doorState: DoorState
+    - elevatorState: ElevatorState
+    - targetFloor: int
+  }
+
+  class ArduinoAdapter {
+    - arduinoPort: String
+    - arduinoEnabled: boolean
+    - serialPortManager: SerialPortManager
+    - initialized: boolean
+    + isAvailable(): boolean
+    + flushInputBuffer(): void
+  }
+
+  class FileEventLogger
+
+  class SerialPortManager {
+    - serialPort: SerialPort
+    - connected: boolean
+    + connect(portName: String): boolean
+    + disconnect(): void
+    + isConnected(): boolean
+    + sendCommand(command: String): String
+    + flushInputBuffer(): void
+    + getAvailablePorts(): String[]
+  }
+
+  class ArduinoException
+  class ArduinoTimeoutException
+}
+
+package "infrastructure.dto" {
+  class ElevatorStateDTO {
+    - elevatorId: String
+    - currentFloor: int
+    - targetFloor: int
+    - status: String
+    - direction: String
+    - doorStatus: String
+    - timestamp: long
+    + from(elevatorId: String, elevator: Elevator): ElevatorStateDTO
+  }
+
+  class ElevatorEventDTO {
+    - elevatorId: String
+    - eventType: String
+    - state: ElevatorStateDTO
+    - message: String
+    - timestamp: long
+  }
+
+  class "GenericResponseDTO<T>" as GenericResponseDTO {
+    - success: boolean
+    - message: String
+    - data: T
+    - timestamp: long
+    + ok(data: T, message: String): GenericResponseDTO
+    + error(message: String): GenericResponseDTO
+  }
+
+  class RequestFloorDTO {
+    - floor: int
+  }
+}
+
+package "infrastructure.event" {
+  interface ElevatorEventListener {
+    + onEvent(event: ElevatorEventDTO): void
+    + isSubscribedTo(elevatorId: String): boolean
+  }
+
+  class ElevatorEventBroadcaster {
+    - listeners: List<ElevatorEventListener>
+    + subscribe(listener: ElevatorEventListener): void
+    + unsubscribe(listener: ElevatorEventListener): void
+    + broadcast(event: ElevatorEventDTO): void
+    + broadcastToElevator(elevatorId: String, event: ElevatorEventDTO): void
+  }
+
+  class SseElevatorEventListener {
+    - emitter: SseEmitter
+    - elevatorId: String
+    - isActive: boolean
+    + onEvent(event: ElevatorEventDTO): void
+    + isSubscribedTo(elevatorId: String): boolean
+    + isActive(): boolean
+  }
+}
+
+package "infrastructure.elevator" {
+  class ElevatorManager {
+    - orchestrators: Map<String, ElevatorOrchestrator>
+    - orchestratorFactory: ElevatorOrchestratorFactory
+    + getOrCreateElevator(elevatorId: String): Elevator
+    + getElevatorState(elevatorId: String): ElevatorStateDTO
+    + getAllElevatorStates(): Map<String, ElevatorStateDTO>
+    + goToFloorAsync(elevatorId: String, targetFloor: int): CompletableFuture<ElevatorStateDTO>
+    + openDoorAsync(elevatorId: String): CompletableFuture<ElevatorStateDTO>
+    + closeDoorAsync(elevatorId: String): CompletableFuture<ElevatorStateDTO>
+    + resetAsync(elevatorId: String): CompletableFuture<ElevatorStateDTO>
+  }
+
+  class ElevatorOrchestrator {
+    - elevator: Elevator
+    - elevatorId: String
+    - hardwarePort: HardwarePort
+    - backendType: String
+    - eventBroadcaster: ElevatorEventBroadcaster
+    + getElevator(): Elevator
+    + getCurrentState(): ElevatorStateDTO
+    + getBackendType(): String
+    + goToFloorAsync(targetFloor: int): CompletableFuture<ElevatorStateDTO>
+    + openDoorAsync(): CompletableFuture<ElevatorStateDTO>
+    + closeDoorAsync(): CompletableFuture<ElevatorStateDTO>
+    + resetAsync(): CompletableFuture<ElevatorStateDTO>
+  }
+
+  class ElevatorOrchestratorFactory {
+    - eventBroadcaster: ElevatorEventBroadcaster
+    - arduinoAdapterProvider: ObjectProvider<ArduinoAdapter>
+    + create(elevatorId: String): ElevatorOrchestrator
+  }
+}
+
+package "infrastructure.controller" {
+  class ElevatorRestController {
+    - elevatorManager: ElevatorManager
+    - eventBroadcaster: ElevatorEventBroadcaster
+    + getAllElevators(): ResponseEntity<GenericResponseDTO>
+    + getElevator(id: String): ResponseEntity<GenericResponseDTO>
+    + requestFloor(id: String, request: RequestFloorDTO): ResponseEntity<GenericResponseDTO>
+    + openDoor(id: String): ResponseEntity<GenericResponseDTO>
+    + closeDoor(id: String): ResponseEntity<GenericResponseDTO>
+    + subscribeToElevator(id: String): SseEmitter
+  }
+}
+
+package "infrastructure.config" {
+  class ElevatorConfig {
+    + elevator(): Elevator
+  }
+
+  class SpringElevatorConfig {
+    + restTemplate(): RestTemplate
+    + addCorsMappings(registry: CorsRegistry): void
+  }
+}
+
+ElevatorApplication ..> ElevatorRestController
+ElevatorApplication ..> ElevatorConfig
+ElevatorApplication ..> SpringElevatorConfig
+
+Elevator *-- Door
+Elevator ..> Floor : valida
+Elevator ..> SensorReading : crea
+Elevator --> ElevatorState
+Elevator --> Direction
+Door --> DoorState
+SensorReading --> DoorState
+SensorReading --> ElevatorState
+Elevator ..> ElevatorException
+Floor ..> ElevatorException
+
+ElevatorService ..|> ElevatorUseCase
+DoorService ..|> DoorUseCase
+ElevatorService --> Elevator
+ElevatorService --> HardwarePort
+ElevatorService --> EventLogger
+ElevatorService ..> SensorReading
+ElevatorService ..> ElevatorException
+
+DoorService --> Elevator
+DoorService --> HardwarePort
+DoorService --> EventLogger
+DoorService ..> SensorReading
+DoorService ..> ElevatorException
+
+SimulatorAdapter ..|> HardwarePort
+ArduinoAdapter ..|> HardwarePort
+FileEventLogger ..|> EventLogger
+ArduinoAdapter --> SerialPortManager
+ArduinoAdapter ..> SensorReading
+ArduinoAdapter ..> DoorState
+ArduinoAdapter ..> ElevatorState
+SerialPortManager <|-- ArduinoException
+ArduinoException <|-- ArduinoTimeoutException
+
+ElevatorRestController --> ElevatorManager
+ElevatorRestController --> ElevatorEventBroadcaster
+ElevatorRestController ..> RequestFloorDTO
+ElevatorRestController ..> GenericResponseDTO
+ElevatorRestController ..> ElevatorStateDTO
+ElevatorRestController ..> SseElevatorEventListener
+
+ElevatorManager o-- "0..*" ElevatorOrchestrator
+ElevatorManager --> ElevatorOrchestratorFactory
+ElevatorManager ..> ElevatorStateDTO
+
+ElevatorOrchestrator --> Elevator
+ElevatorOrchestrator --> HardwarePort
+ElevatorOrchestrator --> ElevatorEventBroadcaster
+ElevatorOrchestrator ..> ElevatorStateDTO
+ElevatorOrchestrator ..> ElevatorEventDTO
+ElevatorOrchestrator ..> ElevatorException
+
+ElevatorOrchestratorFactory --> ElevatorEventBroadcaster
+ElevatorOrchestratorFactory ..> ElevatorOrchestrator
+ElevatorOrchestratorFactory ..> ArduinoAdapter
+ElevatorOrchestratorFactory ..> SimulatorAdapter
+ElevatorOrchestratorFactory ..> HardwarePort
+ElevatorOrchestratorFactory ..> Elevator
+
+ElevatorEventBroadcaster o-- "0..*" ElevatorEventListener
+SseElevatorEventListener ..|> ElevatorEventListener
+SseElevatorEventListener ..> ElevatorEventDTO
+
+ElevatorEventDTO --> ElevatorStateDTO
+ElevatorStateDTO ..> Elevator
+
+ElevatorConfig ..> Elevator
+
+note right of ElevatorOrchestratorFactory
+  Politica actual:
+  - elevador #1 intenta usar Arduino
+  - resto usan simulacion
+end note
+
+note bottom of ElevatorOrchestrator
+  Las operaciones se ejecutan
+  de forma asincrona con
+  CompletableFuture.supplyAsync(...)
+end note
+
+@enduml
