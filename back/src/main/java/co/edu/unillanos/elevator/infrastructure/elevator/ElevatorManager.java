@@ -1,135 +1,120 @@
 package co.edu.unillanos.elevator.infrastructure.elevator;
 
+import co.edu.unillanos.elevator.application.port.out.ElevatorManagementPort;
+import co.edu.unillanos.elevator.domain.exception.ElevatorException;
+import co.edu.unillanos.elevator.domain.model.Elevator;
 import co.edu.unillanos.elevator.infrastructure.dto.ElevatorStateDTO;
-import org.springframework.stereotype.Component;
+import co.edu.unillanos.elevator.infrastructure.factory.ElevatorOrchestratorFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import co.edu.unillanos.elevator.domain.model.Elevator;
-import co.edu.unillanos.elevator.infrastructure.event.ElevatorEventBroadcaster;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+import org.springframework.stereotype.Component;
+
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Gestor de múltiples elevadores
- * Permite crear, obtener y listar elevadores
+ * Gestor de multiples elevadores.
+ * Mantiene el registro de elevadores y delega su creacion a una factoria/orquestacion dedicada.
+ * Implementa el puerto de salida ElevatorManagementPort.
  */
 @Component
-public class ElevatorManager {
+public class ElevatorManager implements ElevatorManagementPort {
     private static final Logger log = LoggerFactory.getLogger(ElevatorManager.class);
-    
-    private final Map<String, Elevator> elevators = new ConcurrentHashMap<>();
-    private final Map<String, ElevatorAsyncService> asyncServices = new ConcurrentHashMap<>();
-    private final ElevatorEventBroadcaster eventBroadcaster;
-    
-    public ElevatorManager(ElevatorEventBroadcaster eventBroadcaster) {
-        this.eventBroadcaster = eventBroadcaster;
+
+    private final Map<String, ElevatorOrchestrator> orchestrators = new ConcurrentHashMap<>();
+    private final ElevatorOrchestratorFactory orchestratorFactory;
+
+    public ElevatorManager(ElevatorOrchestratorFactory orchestratorFactory) {
+        this.orchestratorFactory = orchestratorFactory;
     }
-    
+
     /**
-     * Obtiene o crea un elevador por ID
+     * Obtiene o crea un elevador por ID.
      */
     public Elevator getOrCreateElevator(String elevatorId) {
-        return elevators.computeIfAbsent(elevatorId, id -> {
-            log.info("Creando nuevo elevador con ID: {}", id);
-            Elevator elevator = new Elevator();
-            
-            // Crear servicio asincrónico para este elevador
-            ElevatorAsyncService asyncService = new ElevatorAsyncService(
-                    elevator, 
-                    id, 
-                    eventBroadcaster
-            );
-            asyncServices.put(id, asyncService);
-            
-            return elevator;
-        });
+        return getOrCreateOrchestrator(elevatorId).getElevator();
     }
-    
+
     /**
-     * Obtiene un elevador existente
+     * Obtiene un elevador existente.
      */
     public Elevator getElevator(String elevatorId) {
-        Elevator elevator = elevators.get(elevatorId);
-        if (elevator == null) {
+        ElevatorOrchestrator orchestrator = orchestrators.get(elevatorId);
+        if (orchestrator == null) {
             throw new IllegalArgumentException("Elevador no encontrado: " + elevatorId);
         }
-        return elevator;
+        return orchestrator.getElevator();
     }
-    
+
     /**
-     * Obtiene el servicio asincrónico de un elevador
-     */
-    public ElevatorAsyncService getAsyncService(String elevatorId) {
-        ElevatorAsyncService service = asyncServices.get(elevatorId);
-        if (service == null) {
-            throw new IllegalArgumentException("Servicio de elevador no encontrado: " + elevatorId);
-        }
-        return service;
-    }
-    
-    /**
-     * Obtiene todos los elevadores
+     * Obtiene todos los elevadores.
      */
     public Collection<Elevator> getAllElevators() {
-        return elevators.values();
+        List<Elevator> elevators = new ArrayList<>();
+        orchestrators.values().forEach(orchestrator -> elevators.add(orchestrator.getElevator()));
+        return elevators;
     }
-    
+
     /**
-     * Obtiene los estados de todos los elevadores
+     * Obtiene los estados de todos los elevadores.
      */
     public Map<String, ElevatorStateDTO> getAllElevatorStates() {
         Map<String, ElevatorStateDTO> states = new LinkedHashMap<>();
-        elevators.forEach((id, elevator) -> {
-            states.put(id, ElevatorStateDTO.from(id, elevator));
-        });
+        orchestrators.forEach((id, orchestrator) -> states.put(id, orchestrator.getCurrentState()));
         return states;
     }
-    
+
     /**
-     * Obtiene el estado de un elevador específico
+     * Obtiene el estado de un elevador específico. Si no existe, lo crea automáticamente.
      */
     public ElevatorStateDTO getElevatorState(String elevatorId) {
-        Elevator elevator = getElevator(elevatorId);
-        return ElevatorStateDTO.from(elevatorId, elevator);
+        return getOrCreateOrchestrator(elevatorId).getCurrentState();
     }
-    
+
     /**
-     * Mueve un elevador a un piso específico de forma asincrónica
+     * Mueve un elevador a un piso específico de forma asíncrona.
      */
     public CompletableFuture<ElevatorStateDTO> goToFloorAsync(String elevatorId, int targetFloor) {
-        ElevatorAsyncService service = getAsyncService(elevatorId);
-        return service.goToFloorAsync(targetFloor);
+        return getOrCreateOrchestrator(elevatorId).goToFloorAsync(targetFloor);
     }
-    
+
     /**
-     * Abre la puerta de un elevador de forma asincrónica
+     * Abre la puerta de un elevador de forma asíncrona.
      */
     public CompletableFuture<ElevatorStateDTO> openDoorAsync(String elevatorId) {
-        ElevatorAsyncService service = getAsyncService(elevatorId);
-        return service.openDoorAsync();
+        return getOrCreateOrchestrator(elevatorId).openDoorAsync();
     }
-    
+
     /**
-     * Cierra la puerta de un elevador de forma asincrónica
+     * Cierra la puerta de un elevador de forma asíncrona.
      */
     public CompletableFuture<ElevatorStateDTO> closeDoorAsync(String elevatorId) {
-        ElevatorAsyncService service = getAsyncService(elevatorId);
-        return service.closeDoorAsync();
+        return getOrCreateOrchestrator(elevatorId).closeDoorAsync();
     }
-    
+
     /**
-     * Reinicia un elevador de forma asincrónica
+     * Reinicia un elevador de forma asíncrona.
      */
     public CompletableFuture<ElevatorStateDTO> resetAsync(String elevatorId) {
-        ElevatorAsyncService service = getAsyncService(elevatorId);
-        return service.resetAsync();
+        return getOrCreateOrchestrator(elevatorId).resetAsync();
     }
-    
+
     /**
-     * Obtiene el número total de elevadores
+     * Obtiene el número total de elevadores.
      */
     public int getElevatorCount() {
-        return elevators.size();
+        return orchestrators.size();
+    }
+
+    private ElevatorOrchestrator getOrCreateOrchestrator(String elevatorId) {
+        return orchestrators.computeIfAbsent(elevatorId, id -> {
+            log.info("Creando nuevo elevador con ID: {}", id);
+            return orchestratorFactory.create(id);
+        });
     }
 }
