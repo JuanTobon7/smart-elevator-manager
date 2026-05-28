@@ -1,8 +1,11 @@
 package co.edu.unillanos.elevator.infrastructure.elevator;
 
 import co.edu.unillanos.elevator.application.port.out.HardwarePort;
+import co.edu.unillanos.elevator.domain.enums.DoorState;
 import co.edu.unillanos.elevator.domain.exception.ElevatorException;
 import co.edu.unillanos.elevator.domain.model.Elevator;
+import co.edu.unillanos.elevator.domain.model.SensorReading;
+import co.edu.unillanos.elevator.infrastructure.adapter.ArduinoAdapter;
 import co.edu.unillanos.elevator.infrastructure.dto.ElevatorEventDTO;
 import co.edu.unillanos.elevator.infrastructure.dto.ElevatorStateDTO;
 import co.edu.unillanos.elevator.infrastructure.event.ElevatorEventBroadcaster;
@@ -55,37 +58,49 @@ public class ElevatorOrchestrator {
     }
 
     public CompletableFuture<ElevatorStateDTO> goToFloorAsync(int targetFloor) {
-        return CompletableFuture.supplyAsync(() -> {
-            synchronized (lock) {
-                try {
-                    if (elevator.getCurrentFloor() == targetFloor) {
-                        log.info("[{}] Ya está en el piso {} usando backend {}", elevatorId, targetFloor, backendType);
-                        return ElevatorStateDTO.from(elevatorId, elevator);
-                    }
-
-                    log.info("[{}] Iniciando movimiento al piso {} usando backend {}", elevatorId, targetFloor, backendType);
-
-                    elevator.goToFloor(targetFloor);
-                    broadcast("MOVING", "Elevador en movimiento al piso " + targetFloor);
-
-                    hardwarePort.moveToFloor(targetFloor);
-                    elevator.arriveAtFloor();
-
-                    broadcast("ARRIVED", "Elevador llegó al piso " + targetFloor);
+    return CompletableFuture.supplyAsync(() -> {
+        synchronized (lock) {
+            try {
+                if (elevator.getCurrentFloor() == targetFloor) {
+                    log.info("[{}] Ya está en el piso {}", elevatorId, targetFloor);
                     return ElevatorStateDTO.from(elevatorId, elevator);
-                } catch (ElevatorException e) {
-                    log.error("[{}] Error de dominio moviendo elevador: {}", elevatorId, e.getMessage());
-                    emitErrorEvent(e.getMessage());
-                    throw new CompletionException(e);
-                } catch (RuntimeException e) {
-                    log.error("[{}] Error de hardware moviendo elevador: {}", elevatorId, e.getMessage(), e);
-                    elevator.setError(e.getMessage());
-                    emitErrorEvent(e.getMessage());
-                    throw new CompletionException(e);
                 }
+
+                log.info("[{}] Iniciando movimiento al piso {} usando backend {}", elevatorId, targetFloor, backendType);
+
+                hardwarePort.moveToFloor(targetFloor);
+                elevator.goToFloor(targetFloor);
+                elevator.arriveAtFloor();
+
+                
+                broadcast("MOVING", "Elevador en movimiento al piso " + targetFloor);
+
+                
+
+                broadcast("ARRIVED", "Elevador llegó al piso " + targetFloor);
+                return ElevatorStateDTO.from(elevatorId, elevator);
+
+            } catch (ElevatorException e) {
+                log.error("[{}] Error de dominio moviendo elevador: {}", elevatorId, e.getMessage());
+                emitErrorEvent(e.getMessage());
+                throw new CompletionException(e);
+
+            
+            } catch (IllegalStateException e) {
+                log.warn("[{}] Condición no cumplida: {}", elevatorId, e.getMessage());
+               
+                broadcast("VALIDATION_ERROR", e.getMessage());
+                throw new CompletionException(e);
+
+            } catch (RuntimeException e) {
+                log.error("[{}] Error de hardware moviendo elevador: {}", elevatorId, e.getMessage(), e);
+                elevator.setError(e.getMessage()); // Solo errores reales llegan aquí
+                emitErrorEvent(e.getMessage());
+                throw new CompletionException(e);
             }
-        });
-    }
+        }
+    });
+}
 
     public CompletableFuture<ElevatorStateDTO> openDoorAsync() {
         return CompletableFuture.supplyAsync(() -> {

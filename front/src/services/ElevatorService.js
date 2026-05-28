@@ -187,6 +187,7 @@ class ElevatorService {
     eventSource.addEventListener('DOOR_CLOSED', handleUpdate)
     eventSource.addEventListener('RESET', handleUpdate)
     eventSource.addEventListener('ERROR', handleUpdate)
+    eventSource.addEventListener('VALIDATION_ERROR', handleUpdate)
 
     // Listener genérico y de errores
     eventSource.onmessage = handleUpdate

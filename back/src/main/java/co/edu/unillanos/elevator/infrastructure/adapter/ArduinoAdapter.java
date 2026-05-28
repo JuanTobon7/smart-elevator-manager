@@ -123,15 +123,33 @@ public class ArduinoAdapter implements HardwarePort {
         ensureInitialized();
 
         if (floor < 1 || floor > 10) {
-            log.error("Piso fuera de rango: {}", floor);
             throw new IllegalArgumentException("Piso debe estar entre 1 y 10");
+        }
+
+        // Pre-verificar estado real del sensor ANTES de enviar el comando
+        // Así el dominio recibe una excepción clasificada, no un RuntimeException genérico
+        try {
+            SensorReading currentState = readState();
+            if (currentState.getDoorState() != DoorState.CLOSED) {
+                // IllegalStateException → el orquestador puede tratarla como
+                // error de validación (no fatal) en vez de fallo de hardware
+                throw new IllegalStateException(
+                    "Puerta no está cerrada (estado actual: " 
+                    + currentState.getDoorState() + "). Cierre la puerta antes de moverse."
+                );
+            }
+        } catch (IllegalStateException e) {
+            throw e; // Re-lanzar sin envolver
+        } catch (Exception e) {
+            log.warn("No se pudo pre-verificar estado de puerta: {}", e.getMessage());
+            // Si el READ_STATE falla, intentamos igual y dejamos que el Arduino decida
         }
 
         try {
             log.info("Solicitando movimiento a piso {} al Arduino", floor);
             String response = serialPortManager.sendCommand("MOVE_TO_FLOOR " + floor);
 
-            if (response.contains("MOVING")) {
+            if (response.contains("MOVING") || response.contains("ALREADY_AT")) {
                 log.info("Elevador moviéndose al piso {}", floor);
                 waitForFloor(floor);
             } else {
@@ -141,11 +159,14 @@ public class ArduinoAdapter implements HardwarePort {
             log.error("Timeout moviendo a piso {}", floor, e);
             throw new RuntimeException("Timeout: " + e.getMessage(), e);
         } catch (ArduinoException e) {
+            // ERROR:004 que se escapó de la pre-verificación
+            if (e.getMessage().contains("004") || e.getMessage().contains("Door not closed")) {
+                throw new IllegalStateException("Puerta no cerrada confirmada por Arduino", e);
+            }
             log.error("Error moviendo a piso {}", floor, e);
             throw new RuntimeException("Error de Arduino: " + e.getMessage(), e);
         }
     }
-
     public void flushInputBuffer() {
         try {
             serialPortManager.flushInputBuffer();
@@ -164,8 +185,12 @@ public class ArduinoAdapter implements HardwarePort {
             String response = serialPortManager.sendCommand("OPEN_DOOR");
 
             if (response.contains("OPENING")) {
-                log.info("Puerta del elevador abriéndose");
-                Thread.sleep(1000);
+                log.info("Puerta abriéndose, esperando confirmación del sensor...");
+                // Reemplaza el Thread.sleep fijo por polling real
+                waitForDoorState(DoorState.OPEN, 7000);
+            } else if (response.contains("ERROR:006")) {
+                log.error("Timeout en Arduino abriendo puerta");
+                throw new RuntimeException("Arduino: timeout abriendo puerta");
             } else {
                 log.warn("Respuesta inesperada al abrir puerta: {}", response);
             }
@@ -189,8 +214,11 @@ public class ArduinoAdapter implements HardwarePort {
             String response = serialPortManager.sendCommand("CLOSE_DOOR");
 
             if (response.contains("CLOSING")) {
-                log.info("Puerta del elevador cerrándose");
-                Thread.sleep(800);
+                log.info("Puerta cerrándose, esperando confirmación del sensor...");
+                waitForDoorState(DoorState.CLOSED, 7000);
+            } else if (response.contains("ERROR:006")) {
+                log.error("Timeout en Arduino cerrando puerta");
+                throw new RuntimeException("Arduino: timeout cerrando puerta");
             } else {
                 log.warn("Respuesta inesperada al cerrar puerta: {}", response);
             }
@@ -204,7 +232,32 @@ public class ArduinoAdapter implements HardwarePort {
             Thread.currentThread().interrupt();
             throw new RuntimeException("Operación interrumpida al cerrar puerta", e);
         }
+}
+
+// Método nuevo — análogo a waitForFloor()
+private void waitForDoorState(DoorState expected, long timeoutMs) {
+    long deadline = System.currentTimeMillis() + timeoutMs;
+
+    while (System.currentTimeMillis() < deadline) {
+        try {
+            SensorReading reading = readState();
+
+            if (reading.getDoorState() == expected) {
+                log.info("Puerta confirmada en estado: {}", expected);
+                return;
+            }
+
+            Thread.sleep(300);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return;
+        } catch (RuntimeException e) {
+            log.warn("Error durante polling de puerta: {}", e.getMessage());
+        }
     }
+
+    log.warn("Timeout esperando puerta en estado: {}", expected);
+}
 
     @Override
     public void reset() {
