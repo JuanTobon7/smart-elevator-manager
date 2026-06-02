@@ -7,10 +7,7 @@ class ElevatorService {
   static transformElevator(apiElevator) {
     if (!apiElevator) return null
 
-    // Extraer número del ID (elev-1 → 1)
     const number = parseInt(apiElevator.elevatorId?.split('-')[1] || 0)
-
-    // Mapear dirección: NONE → STOPPED, UP/DOWN sin cambios
     const direction = apiElevator.direction === 'NONE' ? 'STOPPED' : apiElevator.direction
 
     return {
@@ -20,8 +17,9 @@ class ElevatorService {
       destinationFloor: apiElevator.targetFloor || null,
       status: apiElevator.status || 'IDLE',
       direction,
-      weight: 0, // API no envía esto, usar default
-      doorStatus: apiElevator.doorStatus?.toLowerCase() || 'closed'
+      weight: 0,
+      doorStatus: apiElevator.doorStatus?.toLowerCase() || 'closed',
+      sensorDetected: apiElevator.sensorDetected ?? false  // ← NUEVO
     }
   }
 
@@ -139,63 +137,115 @@ class ElevatorService {
    * Retorna una función para cancelar la suscripción
    */
   static subscribeToElevatorUpdates(elevatorId, callback) {
-    const eventSource = new EventSource(
-      `${this.BASE_URL}/elevators/${elevatorId}/subscribe`
-    )
+    let eventSource = null
+    let pollInterval = null
+    let cancelled = false
+    let isMoving = false
 
-    const handleUpdate = (event) => {
-      try {
-        const parsedData = JSON.parse(event.data)
-        console.log(`[SSE] Evento recibido: ${event.type}`, parsedData)
-        
-        let elevatorData = parsedData
-
-        // Según tu backend (ElevatorEventDTO), la info del elevador viene dentro de "state"
-        if (parsedData.state) {
-          elevatorData = parsedData.state
-          // Aseguramos que tenga el ID en caso de que el DTO 'state' no lo incluya
-          if (!elevatorData.elevatorId) {
-            elevatorData.elevatorId = parsedData.elevatorId
+    const startPolling = () => {
+      if (pollInterval) return
+      console.log(`[SSE] Iniciando polling para ${elevatorId}`)
+      pollInterval = setInterval(async () => {
+        if (cancelled) return
+        try {
+          const elevator = await this.getElevatorById(elevatorId)
+          if (elevator) {
+            callback(elevator)
+            // Parar polling cuando llegue a destino
+            if (elevator.status === 'IDLE' || elevator.status === 'ARRIVED') {
+              stopPolling()
+              connect() // reconectar SSE
+            }
           }
-        } else if (parsedData.data) {
-          // Por si acaso viene envuelto en "data" (compatibilidad)
-          elevatorData = parsedData.data
+        } catch (e) {
+          console.warn('[Poll] Error:', e)
         }
+      }, 1500)
+    }
 
-        // Transformamos los datos y los enviamos a App.jsx
-        const transformedData = this.transformElevator(elevatorData)
-        callback(transformedData)
-
-      } catch (error) {
-        console.error('Error parsing SSE data:', error)
+    const stopPolling = () => {
+      if (pollInterval) {
+        clearInterval(pollInterval)
+        pollInterval = null
       }
     }
 
-    const handleError = () => {
-      console.error('SSE connection error')
-      eventSource.close()
-      // Intentar reconectar después de 3 segundos
-      setTimeout(() => {
-        this.subscribeToElevatorUpdates(elevatorId, callback)
-      }, 3000)
+    const connect = () => {
+      if (cancelled) return
+      if (eventSource) {
+        eventSource.close()
+        eventSource = null
+      }
+
+      console.log(`[SSE] Conectando a ${elevatorId}`)
+      eventSource = new EventSource(`${this.BASE_URL}/elevators/${elevatorId}/subscribe`)
+
+      const handleUpdate = (event) => {
+        try {
+          const parsedData = JSON.parse(event.data)
+          console.log(`[SSE] Evento recibido: ${event.type}`, parsedData)
+
+          let elevatorData = parsedData
+          if (parsedData.state) {
+            elevatorData = parsedData.state
+            if (!elevatorData.elevatorId) elevatorData.elevatorId = parsedData.elevatorId
+          } else if (parsedData.data) {
+            elevatorData = parsedData.data
+          }
+
+          const transformed = this.transformElevator(elevatorData)
+          callback(transformed)
+
+          // Si empieza a moverse, activar polling como respaldo
+          if (event.type === 'MOVING') {
+            startPolling()
+          }
+
+          // Si llegó, parar polling
+          if (event.type === 'ARRIVED') {
+            stopPolling()
+          }
+
+        } catch (error) {
+          console.error('[SSE] Error parseando:', error)
+        }
+      }
+
+      const handleError = () => {
+        console.warn('[SSE] Conexión perdida, activando polling...')
+        eventSource.close()
+        eventSource = null
+        // Si se cae durante movimiento, el polling sigue funcionando
+        // Si no hay polling activo, reconectar SSE después de 3s
+        if (!pollInterval) {
+          setTimeout(() => { if (!cancelled) connect() }, 3000)
+        } else {
+          // Reconectar SSE cuando termine el movimiento (lo hace stopPolling → connect)
+          console.log('[SSE] Polling activo, SSE se reconectará al llegar')
+        }
+      }
+
+      eventSource.addEventListener('MOVING',           handleUpdate)
+      eventSource.addEventListener('ARRIVED',          handleUpdate)
+      eventSource.addEventListener('DOOR_OPENED',      handleUpdate)
+      eventSource.addEventListener('DOOR_CLOSED',      handleUpdate)
+      eventSource.addEventListener('RESET',            handleUpdate)
+      eventSource.addEventListener('ERROR',            handleUpdate)
+      eventSource.addEventListener('VALIDATION_ERROR', handleUpdate)
+      eventSource.onmessage = handleUpdate
+      eventSource.onerror   = handleError
     }
 
-    // --- AQUÍ SE ESCUCHAN LOS EVENTOS DEL BACK ---
-    eventSource.addEventListener('MOVING', handleUpdate)
-    eventSource.addEventListener('ARRIVED', handleUpdate)
-    eventSource.addEventListener('DOOR_OPENED', handleUpdate)
-    eventSource.addEventListener('DOOR_CLOSED', handleUpdate)
-    eventSource.addEventListener('RESET', handleUpdate)
-    eventSource.addEventListener('ERROR', handleUpdate)
-    eventSource.addEventListener('VALIDATION_ERROR', handleUpdate)
+    connect()
 
-    // Listener genérico y de errores
-    eventSource.onmessage = handleUpdate
-    eventSource.onerror = handleError
-
-    // Retornar función para desuscribirse
+    // Retornar función de cancelación
     return () => {
-      eventSource.close()
+      cancelled = true
+      stopPolling()
+      if (eventSource) {
+        eventSource.close()
+        eventSource = null
+      }
     }
   }
 

@@ -114,6 +114,104 @@ public class SerialPortManager {
         }
     }
 
+        // Timeout largo solo para movimientos
+    private static final int MOVE_TIMEOUT_MS = 90_000;
+
+    public String sendCommandAwaitFinal(String command) throws ArduinoException {
+        if (!isConnected()) {
+            throw new IllegalStateException("No hay conexión con Arduino");
+        }
+
+        lock.readLock().lock();
+        try {
+            String cmdToSend = command.endsWith("\n") ? command : command + "\n";
+            log.debug("-> Enviando comando: {}", command);
+
+            byte[] cmdBytes = cmdToSend.getBytes(StandardCharsets.UTF_8);
+            serialPort.writeBytes(cmdBytes, cmdBytes.length);
+
+            return readUntilFinal(MOVE_TIMEOUT_MS);
+
+        } finally {
+            lock.readLock().unlock();
+        }
+    }
+
+    /**
+     * Lee líneas del Arduino hasta recibir una respuesta final (OK: o ERROR:).
+     * Las líneas STATUS: y MOVING: se loguean como progreso intermedio.
+     */
+    private String readUntilFinal(int timeoutMs) throws ArduinoException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+
+        while (System.currentTimeMillis() < deadline) {
+            int remaining = (int)(deadline - System.currentTimeMillis());
+            if (remaining <= 0) break;
+
+            String line = readResponse(remaining);
+            if (line == null) break;
+
+            log.debug("<- Respuesta recibida: {}", line);
+
+            if (line.startsWith("ERROR:")) {
+                throw parseError(line);
+            }
+
+            // Respuestas finales
+            if (line.startsWith("OK:ARRIVED")
+                    || line.startsWith("OK:ALREADY_AT")
+                    || line.startsWith("OK:EMERGENCY_STOP")) {
+                return line;
+            }
+
+            // Intermedias: STATUS:DIRECTION=UP, MOVING:...:NOW_AT_FLOOR_N
+            if (line.startsWith("STATUS:") || line.startsWith("MOVING:")) {
+                log.info("<- Progreso: {}", line);
+                // Seguir leyendo
+                continue;
+            }
+
+            // Cualquier otra OK: también es final
+            if (line.startsWith("OK:")) {
+                return line;
+            }
+        }
+
+        throw new ArduinoTimeoutException("Timeout esperando OK:ARRIVED para el movimiento");
+    }
+
+    // Versión con timeout configurable (reemplaza el readResponse privado existente)
+    private String readResponse(int timeoutMs) throws ArduinoException {
+        long startTime = System.currentTimeMillis();
+        StringBuilder response = new StringBuilder();
+
+        while (System.currentTimeMillis() - startTime < timeoutMs) {
+            if (serialPort.bytesAvailable() > 0) {
+                byte[] readBuffer = new byte[serialPort.bytesAvailable()];
+                int numRead = serialPort.readBytes(readBuffer, readBuffer.length);
+
+                if (numRead > 0) {
+                    String chunk = new String(readBuffer, 0, numRead, StandardCharsets.UTF_8);
+                    response.append(chunk);
+
+                    int newlineIndex = response.indexOf("\n");
+                    if (newlineIndex >= 0) {
+                        return response.substring(0, newlineIndex).trim();
+                    }
+                }
+            }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new ArduinoException("Lectura interrumpida", e);
+            }
+        }
+        return null;
+    }
+
+
+
     private String readResponse() throws ArduinoException {
         long startTime = System.currentTimeMillis();
         StringBuilder response = new StringBuilder();

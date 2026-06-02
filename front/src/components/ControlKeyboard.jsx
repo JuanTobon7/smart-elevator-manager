@@ -10,7 +10,7 @@ function ControlKeyboard({
   isMoving,
   isDoorOpen
 }) {
-  const floors = [5, 4, 3, 2, 1]
+  const floors = [3, 2, 1]
   const [pressedButton, setPressedButton] = useState(null)
 
   const handleFloorClick = (floor) => {

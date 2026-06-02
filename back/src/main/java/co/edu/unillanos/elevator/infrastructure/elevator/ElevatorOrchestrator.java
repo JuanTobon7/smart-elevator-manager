@@ -1,7 +1,9 @@
+// ElevatorOrchestrator.java
 package co.edu.unillanos.elevator.infrastructure.elevator;
 
 import co.edu.unillanos.elevator.application.port.out.HardwarePort;
 import co.edu.unillanos.elevator.domain.enums.DoorState;
+import co.edu.unillanos.elevator.domain.enums.ElevatorState;
 import co.edu.unillanos.elevator.domain.exception.ElevatorException;
 import co.edu.unillanos.elevator.domain.model.Elevator;
 import co.edu.unillanos.elevator.domain.model.SensorReading;
@@ -15,10 +17,6 @@ import org.slf4j.LoggerFactory;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 
-/**
- * Orquesta el ciclo de vida y las operaciones de un elevador concreto.
- * Centraliza la coordinación entre dominio, hardware y eventos.
- */
 public class ElevatorOrchestrator {
     private static final Logger log = LoggerFactory.getLogger(ElevatorOrchestrator.class);
 
@@ -43,9 +41,7 @@ public class ElevatorOrchestrator {
         this.eventBroadcaster = eventBroadcaster;
     }
 
-    public Elevator getElevator() {
-        return elevator;
-    }
+    public Elevator getElevator() { return elevator; }
 
     public ElevatorStateDTO getCurrentState() {
         synchronized (lock) {
@@ -53,66 +49,95 @@ public class ElevatorOrchestrator {
         }
     }
 
-    public String getBackendType() {
-        return backendType;
+    public String getBackendType() { return backendType; }
+
+    // ── MODIFICADO: sincroniza dominio con hardware antes de moverse ──
+    public CompletableFuture<ElevatorStateDTO> goToFloorAsync(int targetFloor) {
+        return CompletableFuture.supplyAsync(() -> {
+            synchronized (lock) {
+                try {
+                    // 1. Sincronizar estado del dominio con el hardware real
+                    syncDomainWithHardware();
+
+                    if (elevator.getCurrentFloor() == targetFloor) {
+                        log.info("[{}] Ya está en el piso {}", elevatorId, targetFloor);
+                        return ElevatorStateDTO.from(elevatorId, elevator);
+                    }
+
+                    log.info("[{}] Iniciando movimiento al piso {} usando backend {}",
+                             elevatorId, targetFloor, backendType);
+
+                    // 2. Transición de dominio (valida reglas de negocio)
+                    elevator.goToFloor(targetFloor);
+                    broadcast("MOVING", "Elevador en movimiento al piso " + targetFloor);
+
+                    // 3. Ejecutar en hardware — bloquea hasta llegar o timeout
+                    hardwarePort.moveToFloor(targetFloor);
+
+                    // 4. ← MODIFICADO: verificar que realmente llegó antes de marcar ARRIVED
+                    SensorReading finalState = syncDomainWithHardware();
+
+                    if (finalState.getFloor() == targetFloor
+                            && finalState.getElevatorState() == ElevatorState.IDLE) {
+                        elevator.arriveAtFloor();
+                        broadcast("ARRIVED", "Elevador llegó al piso " + targetFloor);
+                        log.info("[{}] Elevador llegó al piso {}", elevatorId, targetFloor);
+                    } else {
+                        // El hardware reporta un piso distinto — timeout real
+                        String msg = String.format(
+                            "Timeout: se esperaba piso %d, hardware reporta piso %d (estado: %s)",
+                            targetFloor, finalState.getFloor(), finalState.getElevatorState()
+                        );
+                        log.warn("[{}] {}", elevatorId, msg);
+                        elevator.setError(msg);
+                        emitErrorEvent(msg);
+                        throw new CompletionException(new RuntimeException(msg));
+                    }
+
+                    return ElevatorStateDTO.from(elevatorId, elevator);
+
+                } catch (ElevatorException e) {
+                    log.error("[{}] Error de dominio moviendo elevador: {}", elevatorId, e.getMessage());
+                    emitErrorEvent(e.getMessage());
+                    throw new CompletionException(e);
+                } catch (IllegalStateException e) {
+                    log.warn("[{}] Condición no cumplida: {}", elevatorId, e.getMessage());
+                    broadcast("VALIDATION_ERROR", e.getMessage());
+                    throw new CompletionException(e);
+                } catch (CompletionException e) {
+                    throw e; // ya fue manejada arriba
+                } catch (RuntimeException e) {
+                    log.error("[{}] Error de hardware moviendo elevador: {}", elevatorId, e.getMessage(), e);
+                    elevator.setError(e.getMessage());
+                    emitErrorEvent(e.getMessage());
+                    throw new CompletionException(e);
+                }
+            }
+        });
     }
 
-    public CompletableFuture<ElevatorStateDTO> goToFloorAsync(int targetFloor) {
-    return CompletableFuture.supplyAsync(() -> {
-        synchronized (lock) {
-            try {
-                if (elevator.getCurrentFloor() == targetFloor) {
-                    log.info("[{}] Ya está en el piso {}", elevatorId, targetFloor);
-                    return ElevatorStateDTO.from(elevatorId, elevator);
-                }
-
-                log.info("[{}] Iniciando movimiento al piso {} usando backend {}", elevatorId, targetFloor, backendType);
-
-                hardwarePort.moveToFloor(targetFloor);
-                elevator.goToFloor(targetFloor);
-                elevator.arriveAtFloor();
-
-                
-                broadcast("MOVING", "Elevador en movimiento al piso " + targetFloor);
-
-                
-
-                broadcast("ARRIVED", "Elevador llegó al piso " + targetFloor);
-                return ElevatorStateDTO.from(elevatorId, elevator);
-
-            } catch (ElevatorException e) {
-                log.error("[{}] Error de dominio moviendo elevador: {}", elevatorId, e.getMessage());
-                emitErrorEvent(e.getMessage());
-                throw new CompletionException(e);
-
-            
-            } catch (IllegalStateException e) {
-                log.warn("[{}] Condición no cumplida: {}", elevatorId, e.getMessage());
-               
-                broadcast("VALIDATION_ERROR", e.getMessage());
-                throw new CompletionException(e);
-
-            } catch (RuntimeException e) {
-                log.error("[{}] Error de hardware moviendo elevador: {}", elevatorId, e.getMessage(), e);
-                elevator.setError(e.getMessage()); // Solo errores reales llegan aquí
-                emitErrorEvent(e.getMessage());
-                throw new CompletionException(e);
-            }
-        }
-    });
-}
-
+    // ── MODIFICADO: hardware primero, luego sincronizar dominio ──
     public CompletableFuture<ElevatorStateDTO> openDoorAsync() {
         return CompletableFuture.supplyAsync(() -> {
             synchronized (lock) {
                 try {
                     log.info("[{}] Abriendo puerta usando backend {}", elevatorId, backendType);
 
+                    // 1. Sincronizar antes de validar
+                    syncDomainWithHardware();
+
+                    // 2. Transición de dominio
                     elevator.openDoor();
+
+                    // 3. Ejecutar en hardware
                     hardwarePort.openDoor();
+
+                    // 4. Confirmar con sensor
+                    syncDomainWithHardware();
 
                     broadcast("DOOR_OPENED", "Puerta abierta");
                     return ElevatorStateDTO.from(elevatorId, elevator);
+
                 } catch (ElevatorException e) {
                     log.error("[{}] Error de dominio abriendo puerta: {}", elevatorId, e.getMessage());
                     emitErrorEvent(e.getMessage());
@@ -127,22 +152,46 @@ public class ElevatorOrchestrator {
         });
     }
 
+    // ── MODIFICADO: sincronizar estado real antes de intentar cerrar ──
     public CompletableFuture<ElevatorStateDTO> closeDoorAsync() {
         return CompletableFuture.supplyAsync(() -> {
             synchronized (lock) {
                 try {
                     log.info("[{}] Cerrando puerta usando backend {}", elevatorId, backendType);
 
+                    // 1. Leer estado real del hardware
+                    SensorReading current = syncDomainWithHardware();
+
+                    // 2. Validar que la puerta realmente está abierta según el sensor
+                    if (current.getDoorState() != DoorState.OPEN) {
+                        String msg = "La puerta no está abierta según el sensor (estado: "
+                                     + current.getDoorState() + ")";
+                        log.warn("[{}] {}", elevatorId, msg);
+                        broadcast("VALIDATION_ERROR", msg);
+                        throw new CompletionException(new ElevatorException(msg));
+                    }
+
+                    // 3. Transición de dominio (ahora ya está sincronizado → no fallará)
                     elevator.closeDoor();
+
+                    // 4. Ejecutar en hardware
                     hardwarePort.closeDoor();
+
+                    // 5. Completar transición de dominio
                     elevator.completeDoorClosing();
+
+                    // 6. Confirmar con sensor
+                    syncDomainWithHardware();
 
                     broadcast("DOOR_CLOSED", "Puerta cerrada");
                     return ElevatorStateDTO.from(elevatorId, elevator);
+
                 } catch (ElevatorException e) {
                     log.error("[{}] Error de dominio cerrando puerta: {}", elevatorId, e.getMessage());
                     emitErrorEvent(e.getMessage());
                     throw new CompletionException(e);
+                } catch (CompletionException e) {
+                    throw e;
                 } catch (RuntimeException e) {
                     log.error("[{}] Error de hardware cerrando puerta: {}", elevatorId, e.getMessage(), e);
                     elevator.setError(e.getMessage());
@@ -158,10 +207,8 @@ public class ElevatorOrchestrator {
             synchronized (lock) {
                 try {
                     log.info("[{}] Reiniciando elevador usando backend {}", elevatorId, backendType);
-
                     hardwarePort.reset();
                     elevator.reset();
-
                     broadcast("RESET", "Elevador reiniciado");
                     return ElevatorStateDTO.from(elevatorId, elevator);
                 } catch (RuntimeException e) {
@@ -172,6 +219,50 @@ public class ElevatorOrchestrator {
                 }
             }
         });
+    }
+
+    /**
+     * Lee el estado real del hardware y actualiza el dominio en consecuencia.
+     * ← NUEVO: método central de sincronización — llamar antes de cualquier operación.
+     */
+    private SensorReading syncDomainWithHardware() {
+        try {
+            SensorReading reading = hardwarePort.readState();
+
+            // Sincronizar piso
+            int hwFloor = reading.getFloor();
+            if (hwFloor != elevator.getCurrentFloor()) {
+                log.info("[{}] Sincronizando piso: dominio={} hardware={}",
+                         elevatorId, elevator.getCurrentFloor(), hwFloor);
+                // Forzar piso vía reset parcial sin tocar otros estados
+                elevator.syncFloor(hwFloor);
+            }
+
+            // Sincronizar puerta
+            DoorState hwDoor = reading.getDoorState();
+            ElevatorState domainState = elevator.getState();
+
+            if (hwDoor == DoorState.OPEN && domainState == ElevatorState.IDLE) {
+                // Hardware dice puerta abierta pero dominio cree que está cerrado en IDLE
+                log.info("[{}] Sincronizando puerta: hardware=OPEN, forzando DOOR_OPEN en dominio",
+                         elevatorId);
+                elevator.forceDoorOpen();
+            } else if (hwDoor == DoorState.CLOSED
+                    && (domainState == ElevatorState.DOOR_OPEN
+                        || domainState == ElevatorState.DOOR_CLOSING)) {
+                // Hardware dice puerta cerrada pero dominio cree que sigue abierta
+                log.info("[{}] Sincronizando puerta: hardware=CLOSED, forzando IDLE en dominio",
+                         elevatorId);
+                elevator.forceDoorClosed();
+            }
+
+            return reading;
+
+        } catch (Exception e) {
+            log.warn("[{}] No se pudo sincronizar con hardware: {}", elevatorId, e.getMessage());
+            // Retornar lectura desde dominio como fallback
+            return elevator.readSensors();
+        }
     }
 
     private void emitErrorEvent(String message) {
