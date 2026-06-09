@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import './App.css'
 import ElevatorSelector from './components/ElevatorSelector'
 import ElevatorPanel from './components/ElevatorPanel'
@@ -10,8 +10,14 @@ function App() {
   const [selectedElevator, setSelectedElevator] = useState(null)
   const [loading, setLoading] = useState(true)
   const [theme, setTheme] = useState('dark')
+  const [warning, setWarning] = useState(null)  
+  const selectedElevatorIdRef = useRef(selectedElevatorId)
 
-  // Cargar elevadores disponibles
+  // Mantenerlo sincronizado cuando cambie
+  useEffect(() => {
+    selectedElevatorIdRef.current = selectedElevatorId
+  }, [selectedElevatorId])
+
   useEffect(() => {
     const fetchElevators = async () => {
       try {
@@ -26,41 +32,63 @@ function App() {
         setLoading(false)
       }
     }
-
     fetchElevators()
   }, [])
 
-  // Suscribirse a TODOS los elevadores
   useEffect(() => {
     if (elevators.length === 0) return
 
     const unsubscribers = elevators.map(elevator =>
+      
       ElevatorService.subscribeToElevatorUpdates(
         elevator.id,
-        (updatedElevator) => {
-          console.log("¡Llegó un evento del servidor!", updatedElevator)
-          // Actualizar en la lista de elevadores
+        (updatedElevator, eventType, errorMessage) => {
+
+          if (eventType === 'VALIDATION_ERROR' || eventType === 'ERROR') {
+            if (elevator.id === selectedElevatorIdRef.current) {
+              setWarning(errorMessage)
+              setTimeout(() => {
+                ElevatorService.getElevatorById(elevator.id).then(realState => {
+                if (realState) {
+                  setElevators(prevs =>
+                    prevs.map(e => e.id === realState.id ? realState : e)
+                  )
+                  setSelectedElevator(realState)
+                }
+              })
+            }, 800)
+          }
+            return
+        }
+
+          if (!updatedElevator) return
+
+          // ← NUEVO: si hay warning activo y el evento es de polling,
+          // no pisar el estado hasta que el warning expire
+          // El warning indica que el movimiento fue rechazado —
+          // el estado real es IDLE, no GOING_UP
+          if (eventType === 'POLL' && updatedElevator.status === 'GOING_UP') {
+            return
+          }
+
+          setWarning(null)
           setElevators(prevs =>
             prevs.map(e => e.id === updatedElevator.id ? updatedElevator : e)
           )
-          // Si es el elevador seleccionado, actualizar también selectedElevator
-          setSelectedElevator(prev => 
+          setSelectedElevator(prev =>
             prev?.id === updatedElevator.id ? updatedElevator : prev
           )
         }
       )
     )
 
-    // Cleanup: desuscribirse de todos al desmontar
     return () => {
       unsubscribers.forEach(unsubscribe => unsubscribe?.())
     }
   }, [elevators.length])
 
-  // Al cambiar elevador seleccionado, cargar su estado actual
   useEffect(() => {
     if (!selectedElevatorId) return
-
     ElevatorService.getElevatorById(selectedElevatorId).then(data => {
       setSelectedElevator(data)
     })
@@ -68,6 +96,7 @@ function App() {
 
   const handleSelectElevator = (elevatorId) => {
     setSelectedElevatorId(elevatorId)
+    setWarning(null)  // ← limpiar warning al cambiar elevador
   }
 
   const toggleTheme = () => {
@@ -93,10 +122,19 @@ function App() {
             <span className="title-icon">🏢</span>
             Smart Elevator Manager
           </h1>
-          <button className="theme-toggle" onClick={toggleTheme} title="Cambiar tema">
+          <button className="theme-toggle" onClick={toggleTheme}>
             {theme === 'dark' ? '☀️' : '🌙'}
           </button>
         </div>
+
+        {/* Banner de advertencia */}
+        {warning && (
+          <div className="warning-banner">
+            <span className="warning-icon">⚠️</span>
+            <span className="warning-text">{warning}</span>
+            <button className="warning-close" onClick={() => setWarning(null)}>✕</button>
+          </div>
+        )}
       </header>
 
       <main className="app-main">
@@ -112,14 +150,18 @@ function App() {
           {selectedElevator ? (
             <ElevatorPanel
               elevator={selectedElevator}
-              onRequestFloor={(floor) => 
+              warning={warning}
+              onRequestFloor={(floor) =>
                 ElevatorService.requestFloor(selectedElevatorId, floor)
               }
-              onOpenDoor={() => 
+              onOpenDoor={() =>
                 ElevatorService.openDoor(selectedElevatorId)
               }
-              onCloseDoor={() => 
+              onCloseDoor={() =>
                 ElevatorService.closeDoor(selectedElevatorId)
+              }
+              onEmergencyStop={() =>
+                ElevatorService.emergencyStop(selectedElevatorId)
               }
             />
           ) : (

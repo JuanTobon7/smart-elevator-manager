@@ -1,10 +1,10 @@
 package co.edu.unillanos.elevator.infrastructure.elevator;
 
 import co.edu.unillanos.elevator.application.port.out.ElevatorManagementPort;
-import co.edu.unillanos.elevator.domain.exception.ElevatorException;
 import co.edu.unillanos.elevator.domain.model.Elevator;
 import co.edu.unillanos.elevator.infrastructure.dto.ElevatorStateDTO;
 import co.edu.unillanos.elevator.infrastructure.factory.ElevatorOrchestratorFactory;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -83,6 +83,11 @@ public class ElevatorManager implements ElevatorManagementPort {
         return getOrCreateOrchestrator(elevatorId).goToFloorAsync(targetFloor);
     }
 
+    @Override
+    public CompletableFuture<ElevatorStateDTO> emergencyStopAsync(String elevatorId) {
+        ElevatorOrchestrator orchestrator = getOrchestratorById(elevatorId);
+        return orchestrator.emergencyStopAsync();
+    }
     /**
      * Abre la puerta de un elevador de forma asíncrona.
      */

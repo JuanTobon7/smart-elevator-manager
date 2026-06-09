@@ -27,6 +27,8 @@ public interface HardwarePort {
      */
     void openDoor();
 
+    void emergencyStop();
+
     /**
      * Cierra la puerta del elevador
      */

@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Implementación de Patrones de Diseño - Smart Elevator Manager</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.1em;
+            opacity: 0.9;
+        }
+
+        main {
+            padding: 40px;
+        }
+
+        .section {
+            margin-bottom: 50px;
+        }
+
+        h2 {
+            color: #667eea;
+            font-size: 2em;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+
+        h3 {
+            color: #764ba2;
+            font-size: 1.4em;
+            margin-top: 25px;
+            margin-bottom: 15px;
+        }
+
+        h4 {
+            color: #555;
+            font-size: 1.1em;
+            margin-top: 15px;
+            margin-bottom: 10px;
+            font-weight: 600;
+        }
+
+        p, li {
+            margin-bottom: 12px;
+            font-size: 0.95em;
+        }
+
+        ul, ol {
+            margin-left: 30px;
+        }
+
+        li {
+            margin-bottom: 8px;
+        }
+
+        .file-box {
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+
+        .file-box strong {
+            color: #667eea;
+        }
+
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #d63384;
+        }
+
+        pre {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-size: 0.85em;
+            line-height: 1.4;
+        }
+
+        pre code {
+            background: none;
+            color: inherit;
+            padding: 0;
+        }
+
+        .pattern-icon {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            background: #667eea;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 30px;
+            margin-right: 8px;
+            font-weight: bold;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        thead {
+            background: #667eea;
+            color: white;
+        }
+
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+            font-size: 0.9em;
+        }
+
+        tbody tr:hover {
+            background: #f5f5f5;
+        }
+
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: bold;
+            margin: 2px;
+        }
+
+        .badge-success {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .badge-info {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+
+        .comparison-table {
+            margin: 20px 0;
+        }
+
+        .comparison-col {
+            background: #fff3cd;
+        }
+
+        .comparison-col.good {
+            background: #d4edda;
+        }
+
+        .warning {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .success {
+            background: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+
+        .directory-tree {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+            line-height: 1.8;
+            overflow-x: auto;
+        }
+
+        .checkmark {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .xmark {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        footer {
+            background: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            border-top: 1px solid #ddd;
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .toc {
+            background: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+
+        .toc h3 {
+            margin-top: 0;
+            color: #667eea;
+        }
+
+        .toc ul {
+            list-style: none;
+            margin-left: 0;
+        }
+
+        .toc a {
+            color: #667eea;
+            text-decoration: none;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .toc li {
+            margin-bottom: 8px;
+        }
+
+        @media (max-width: 768px) {
+            header h1 {
+                font-size: 1.8em;
+            }
+
+            main {
+                padding: 20px;
+            }
+
+            h2 {
+                font-size: 1.5em;
+            }
+
+            table {
+                font-size: 0.8em;
+            }
+
+            th, td {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🛗 Implementación de Patrones de Diseño</h1>
+            <p>Smart Elevator Manager | Universidad de los Llanos | 2026-I</p>
+        </header>
+
+        <main>
+            <!-- Tabla de Contenidos -->
+            <div class="toc">
+                <h3>📑 Tabla de Contenidos</h3>
+                <ul>
+                    <li><a href="#adapter">1. Patrón Adapter (Estructural)</a></li>
+                    <li><a href="#observer">2. Patrón Observer (Comportamental)</a></li>
+                    <li><a href="#state">3. Patrón State (Comportamental)</a></li>
+                    <li><a href="#solid">4. Conexión con SOLID y GRASP</a></li>
+                    <li><a href="#estructura">5. Estructura de Directorios</a></li>
+                    <li><a href="#resumen">6. Resumen de Implementación</a></li>
+                </ul>
+            </div>
+
+            <!-- PATRÓN ADAPTER -->
+            <section class="section" id="adapter">
+                <h2>🔌 1. Patrón Adapter (Estructural)</h2>
+
+                <h3>Propósito</h3>
+                <p>Permite que el sistema se comunique con hardware incompatible (Arduino real y simulado) a través de la misma interfaz, sin que los servicios de aplicación conozcan con cuál están trabajando.</p>
+
+                <h3>Archivos Involucrados</h3>
+
+                <h4><span class="pattern-icon">🎯</span>Target (Interfaz)</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>application/port/out/HardwarePort.java</code><br>
+                    <strong>Descripción:</strong> Define el contrato que todos los adaptadores de hardware deben cumplir<br>
+                    <strong>Métodos principales:</strong>
+                    <ul style="margin-top: 8px;">
+                        <li><code>moveToFloor(int floor)</code></li>
+                        <li><code>openDoor()</code></li>
+                        <li><code>closeDoor()</code></li>
+                        <li><code>readState()</code></li>
+                        <li><code>reset()</code></li>
+                        <li><code>executeCommand(String command)</code></li>
+                    </ul>
+                </div>
+
+                <h4><span class="pattern-icon">1️⃣</span>Adapter 1: Simulador</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>infrastructure/adapter/SimulatorAdapter.java</code><br>
+                    <strong>Anotación:</strong> <code>@Profile("simulator")</code><br>
+                    <strong>Descripción:</strong> Implementa <code>HardwarePort</code> simulando el hardware en memoria con <code>Thread.sleep</code> para tiempos realistas<br>
+                    <strong>Activado cuando:</strong> <code>spring.profiles.active=simulator</code>
+                </div>
+
+                <h4><span class="pattern-icon">2️⃣</span>Adapter 2: Arduino Real</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>infrastructure/adapter/ArduinoAdapter.java</code><br>
+                    <strong>Anotación:</strong> <code>@Profile("arduino")</code><br>
+                    <strong>Descripción:</strong> Implementa <code>HardwarePort</code> para comunicación con hardware Arduino real<br>
+                    <strong>Dependencia:</strong> <code>SerialPortManager.java</code> (gestión de puerto serie)<br>
+                    <strong>Configuración:</strong> Puerto configurable via <code>arduino.port</code> en <code>application.properties</code><br>
+                    <strong>Características:</strong>
+                    <ul style="margin-top: 8px;">
+                        <li>Inicialización con <code>@PostConstruct</code></li>
+                        <li>Limpieza con <code>@PreDestroy</code></li>
+                        <li>Validación de conexión con comando PING</li>
+                        <li>Polling para esperar llegada a piso</li>
+                    </ul>
+                </div>
+
+                <h4><span class="pattern-icon">3️⃣</span>Adapter 3: Event Logger</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>infrastructure/adapter/FileEventLogger.java</code><br>
+                    <strong>Descripción:</strong> Adaptador de salida que implementa <code>EventLogger</code><br>
+                    <strong>Funcionalidad:</strong> Escribe eventos del elevador en archivo <code>elevator.log</code>
+                </div>
+
+                <h4>🔧 Mecanismo de Inyección</h4>
+                <div class="file-box">
+                    <strong>Archivos:</strong> <code>infrastructure/config/ElevatorConfig.java</code>, <code>infrastructure/config/SpringElevatorConfig.java</code><br>
+                    <strong>Descripción:</strong> Spring Boot inyecta el adaptador correcto según el perfil activo<br>
+                    <strong>Servicios que usan:</strong>
+                    <ul style="margin-top: 8px;">
+                        <li><code>ElevatorService.java</code> (solo conoce <code>HardwarePort</code>)</li>
+                        <li><code>DoorService.java</code> (solo conoce <code>HardwarePort</code>)</li>
+                    </ul>
+                </div>
+
+                <h4>📝 Evidencia en el Código</h4>
+                <pre><code>// En ElevatorService.java
+public void goToFloor(int floor) {
+    // Llama hardwarePort sin saber si es simulador o Arduino
+    hardwarePort.moveToFloor(floor);
+}</code></pre>
+            </section>
+
+            <!-- PATRÓN OBSERVER -->
+            <section class="section" id="observer">
+                <h2>👁️ 2. Patrón Observer (Comportamental)</h2>
+
+                <h3>Propósito</h3>
+                <p>Múltiples clientes web conectados vía SSE reciben notificaciones automáticas cuando el elevador cambia de estado, sin que el emisor dependa de los receptores.</p>
+
+                <h3>Archivos Involucrados</h3>
+
+                <h4><span class="pattern-icon">👁️</span>Observer (Interfaz)</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>infrastructure/event/ElevatorEventListener.java</code><br>
+                    <strong>Descripción:</strong> Define el contrato para observadores de eventos<br>
+                    <strong>Métodos:</strong>
+                    <ul style="margin-top: 8px;">
+                        <li><code>onEvent(ElevatorEventDTO event)</code> - recibe el evento</li>
+                        <li><code>isSubscribedTo(String elevatorId)</code> - filtra por ID del elevador</li>
+                    </ul>
+                </div>
+
+                <h4><span class="pattern-icon">📢</span>Subject (Observable)</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>infrastructure/event/ElevatorEventBroadcaster.java</code><br>
+                    <strong>Descripción:</strong> Mantiene lista thread-safe de observadores<br>
+                    <strong>Estructura interna:</strong> <code>CopyOnWriteArrayList&lt;ElevatorEventListener&gt;</code> (para multihilo)<br>
+                    <strong>Métodos principales:</strong>
+                    <ul style="margin-top: 8px;">
+                        <li><code>subscribe(ElevatorEventListener listener)</code> - añade observador</li>
+                        <li><code>unsubscribe(ElevatorEventListener listener)</code> - remueve observador</li>
+                        <li><code>broadcast(ElevatorEventDTO event)</code> - notifica a todos</li>
+                        <li><code>broadcastToElevator(String elevatorId, ElevatorEventDTO event)</code> - notifica listeners filtrados</li>
+                    </ul>
+                    <strong>Comentario en el código:</strong> "Broadcaster de eventos de elevadores usando observador pattern"
+                </div>
+
+                <h4><span class="pattern-icon">👂</span>ConcreteObserver</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>infrastructure/event/SseElevatorEventListener.java</code><br>
+                    <strong>Descripción:</strong> Implementa <code>ElevatorEventListener</code> para enviar eventos via SSE<br>
+                    <strong>Características:</strong>
+                    <ul style="margin-top: 8px;">
+                        <li>Recibe evento del broadcaster</li>
+                        <li>Lo reenvía al cliente web mediante <code>SseEmitter</code></li>
+                        <li>Se auto-desuscribe si el cliente se desconecta (<code>isActive = false</code>)</li>
+                        <li>Manejo de excepciones para clientes desconectados</li>
+                    </ul>
+                </div>
+
+                <h4>🎬 Flujo Completo</h4>
+                <ol>
+                    <li><strong>Disparador:</strong> <code>ElevatorAsyncService.goToFloorAsync()</code></li>
+                    <li><strong>Broadcast:</strong> Llama <code>eventBroadcaster.broadcastToElevator(elevatorId, evento)</code></li>
+                    <li><strong>Filtrado:</strong> Filtra listeners que tengan <code>isSubscribedTo(elevatorId) = true</code></li>
+                    <li><strong>Notificación:</strong> Llama <code>onEvent(event)</code> en cada <code>SseElevatorEventListener</code> activo</li>
+                </ol>
+
+                <h4>📡 Endpoint SSE</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>infrastructure/controller/ElevatorRestController.java</code><br>
+                    <strong>Método:</strong> Endpoint <code>/api/elevators/{id}/subscribe</code> que devuelve <code>SseEmitter</code><br>
+                    <strong>Descripción:</strong> Los clientes se conectan aquí para recibir eventos en tiempo real
+                </div>
+
+                <h4>📦 DTO de Eventos</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>infrastructure/dto/ElevatorEventDTO.java</code><br>
+                    <strong>Descripción:</strong> Datos que se envían en cada notificación a los clientes
+                </div>
+            </section>
+
+            <!-- PATRÓN STATE -->
+            <section class="section" id="state">
+                <h2>🎮 3. Patrón State (Comportamental)</h2>
+
+                <h3>Propósito</h3>
+                <p>El elevador tiene comportamientos distintos y operaciones válidas diferentes según su estado actual, evitando dispersar reglas de transición en condicionales por todo el código.</p>
+
+                <h3>Archivos Involucrados</h3>
+
+                <h4>📊 Estados Definidos</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>domain/enums/ElevatorState.java</code><br>
+                    <strong>Estados:</strong> <code>IDLE</code>, <code>MOVING</code>, <code>DOOR_OPEN</code>, <code>DOOR_CLOSING</code>, <code>ERROR</code>
+                </div>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>domain/enums/DoorState.java</code><br>
+                    <strong>Estados:</strong> <code>OPEN</code>, <code>CLOSED</code>, <code>CLOSING</code>
+                </div>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>domain/enums/Direction.java</code><br>
+                    <strong>Estados:</strong> <code>UP</code>, <code>DOWN</code>, <code>NONE</code>
+                </div>
+
+                <h4>🎮 Contexto (State Machine)</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>domain/model/Elevator.java</code><br>
+                    <strong>Descripción:</strong> Contiene el estado actual y expone métodos que cambian de estado<br>
+                    <strong>Punto único de transiciones:</strong> Es el único lugar donde ocurren cambios de estado<br>
+                    <strong>Métodos principales:</strong>
+                    <ul style="margin-top: 8px;">
+                        <li><code>goToFloor(int floor)</code> - transición <code>IDLE → MOVING</code></li>
+                        <li><code>arriveAtFloor()</code> - transición <code>MOVING → IDLE</code></li>
+                        <li><code>openDoor()</code> - transición <code>IDLE → DOOR_OPEN</code></li>
+                        <li><code>closeDoor()</code> - transición <code>DOOR_OPEN → DOOR_CLOSING</code></li>
+                        <li><code>completeDoorClosing()</code> - transición <code>DOOR_CLOSING → IDLE</code></li>
+                        <li><code>setError()</code> - transición a <code>ERROR</code></li>
+                        <li><code>reset()</code> - salida de estado <code>ERROR</code></li>
+                    </ul>
+                </div>
+
+                <h4>🚪 Contexto Puerta</h4>
+                <div class="file-box">
+                    <strong>Archivo:</strong> <code>domain/model/Door.java</code><br>
+                    <strong>Descripción:</strong> Máquina de estados para la puerta del elevador<br>
+                    <strong>Estados y transiciones:</strong> Similar a la del elevador
+                </div>
+
+                <h4>✅ Validaciones de Transiciones</h4>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Transición</th>
+                            <th>Método</th>
+                            <th>Validación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>IDLE → MOVING</td>
+                            <td><code>goToFloor()</code></td>
+                            <td>Puerta cerrada + estado ≠ ERROR</td>
+                        </tr>
+                        <tr>
+                            <td>MOVING → IDLE</td>
+                            <td><code>arriveAtFloor()</code></td>
+                            <td>Estado == MOVING</td>
+                        </tr>
+                        <tr>
+                            <td>IDLE → DOOR_OPEN</td>
+                            <td><code>openDoor()</code></td>
+                            <td>Estado == IDLE (solo parado)</td>
+                        </tr>
+                        <tr>
+                            <td>DOOR_OPEN → DOOR_CLOSING → IDLE</td>
+                            <td><code>closeDoor()`, `completeDoorClosing()</code></td>
+                            <td>Validación de estado previo</td>
+                        </tr>
+                        <tr>
+                            <td>Cualquier → ERROR</td>
+                            <td><code>setError()</code></td>
+                            <td>Operación inválida</td>
+                        </tr>
+                        <tr>
+                            <td>ERROR → IDLE</td>
+                            <td><code>reset()</code></td>
+                            <td>Solo método para salir de ERROR</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h4>📋 Manejo de Errores</h4>
+                <div class="file-box">
+                    <strong>Excepción:</strong> <code>domain/exception/ElevatorException.java</code><br>
+                    <strong>Uso:</strong> Lanzada cuando se intenta una operación inválida en el estado actual<br>
+                    <strong>Ejemplo:</strong> Intentar abrir puerta mientras se mueve lanza <code>ElevatorException</code>
+                </div>
+            </section>
+
+            <!-- CONEXIÓN CON SOLID Y GRASP -->
+            <section class="section" id="solid">
+                <h2>⚙️ 4. Conexión con SOLID y GRASP</h2>
+
+                <h3>SOLID</h3>
+
+                <h4><span class="highlight">🔹 SRP (Single Responsibility)</span></h4>
+                <ul>
+                    <li><code>ElevatorEventBroadcaster</code> solo gestiona observadores</li>
+                    <li><code>FileEventLogger</code> solo escribe en archivo</li>
+                    <li><code>Elevator</code> solo contiene reglas de dominio</li>
+                    <li>Cada clase tiene una única razón para cambiar</li>
+                </ul>
+
+                <h4><span class="highlight">🔹 OCP (Open/Closed)</span></h4>
+                <ul>
+                    <li>Agregar nuevo adaptador de hardware → NO modifica <code>HardwarePort</code> ni <code>ElevatorService</code></li>
+                    <li>Agregar nuevo observer → NO modifica <code>ElevatorEventBroadcaster</code></li>
+                    <li>Extensión sin modificación de clases existentes</li>
+                </ul>
+
+                <h4><span class="highlight">🔹 LSP (Liskov Substitution)</span></h4>
+                <ul>
+                    <li><code>SimulatorAdapter</code> y <code>ArduinoAdapter</code> son intercambiables via <code>HardwarePort</code></li>
+                    <li>Sistema funciona idéntico con cualquiera de los dos</li>
+                </ul>
+
+                <h4><span class="highlight">🔹 DIP (Dependency Inversion)</span></h4>
+                <ul>
+                    <li><code>ElevatorService</code> depende de <code>HardwarePort</code> (interfaz)</li>
+                    <li><code>DoorService</code> depende de <code>HardwarePort</code> (interfaz)</li>
+                    <li>NO dependen de <code>SimulatorAdapter</code> o <code>ArduinoAdapter</code> (implementaciones)</li>
+                </ul>
+
+                <h3>GRASP</h3>
+
+                <h4><span class="highlight">🎯 Low Coupling</span></h4>
+                <ul>
+                    <li>Capa de dominio (<code>Elevator</code>, <code>Door</code>, <code>Floor</code>) no conoce Spring, SSE, sistema de archivos</li>
+                    <li><code>ElevatorEventBroadcaster</code> no conoce <code>SseElevatorEventListener</code> directamente, solo <code>ElevatorEventListener</code></li>
+                </ul>
+
+                <h4><span class="highlight">🎯 High Cohesion</span></h4>
+                <ul>
+                    <li><code>ElevatorEventBroadcaster</code> agrupa solo lógica de gestión de observadores</li>
+                    <li><code>Elevator</code> agrupa solo reglas y transiciones de máquina de estados</li>
+                </ul>
+
+                <h4><span class="highlight">🎯 Protected Variations</span></h4>
+                <ul>
+                    <li><code>HardwarePort</code> protege al sistema de cambios en hardware</li>
+                    <li><code>ElevatorEventListener</code> protege broadcaster de cambios en cómo clientes consumen eventos</li>
+                </ul>
+
+                <h4><span class="highlight">🎯 Controller</span></h4>
+                <ul>
+                    <li><code>ElevatorRestController</code> recibe peticiones HTTP y delega sin ejecutar lógica de negocio</li>
+                    <li><code>ElevatorAsyncService</code> coordina operaciones del elevador y emisión de eventos</li>
+                </ul>
+            </section>
+
+            <!-- ESTRUCTURA DE DIRECTORIOS -->
+            <section class="section" id="estructura">
+                <h2>📁 5. Estructura de Directorios</h2>
+
+                <div class="directory-tree">
+src/main/java/co/edu/unillanos/elevator/<br>
+│<br>
+├── domain/                          <span style="color: #666;"># Lógica de negocio (Estados, Excepciones, Modelos)</span><br>
+│   ├── enums/<br>
+│   │   ├── <span class="checkmark">✓</span> ElevatorState.java      <span style="color: #666;"># Estados del elevador</span><br>
+│   │   ├── <span class="checkmark">✓</span> DoorState.java          <span style="color: #666;"># Estados de la puerta</span><br>
+│   │   └── <span class="checkmark">✓</span> Direction.java          <span style="color: #666;"># Direcciones de movimiento</span><br>
+│   ├── exception/<br>
+│   │   └── <span class="checkmark">✓</span> ElevatorException.java   <span style="color: #666;"># Excepciones del dominio</span><br>
+│   └── model/<br>
+│       ├── <span class="checkmark">✓</span> Elevator.java            <span style="color: #667eea;"># STATE PATTERN</span><br>
+│       ├── <span class="checkmark">✓</span> Door.java                <span style="color: #666;"># Estados de la puerta</span><br>
+│       ├── Floor.java<br>
+│       └── SensorReading.java<br>
+│<br>
+├── application/                     <span style="color: #666;"># Puertos (interfaces de negocio)</span><br>
+│   ├── port/<br>
+│   │   ├── in/<br>
+│   │   │   ├── ElevatorUseCase.java<br>
+│   │   │   └── DoorUseCase.java<br>
+│   │   └── out/<br>
+│   │       └── <span class="checkmark">✓</span> HardwarePort.java   <span style="color: #667eea;"># ADAPTER TARGET</span><br>
+│   └── service/<br>
+│       ├── ElevatorService.java    <span style="color: #666;"># Usa HardwarePort</span><br>
+│       └── DoorService.java        <span style="color: #666;"># Usa HardwarePort</span><br>
+│<br>
+└── infrastructure/                  <span style="color: #666;"># Implementaciones (Adaptadores, Controladores, DTOs)</span><br>
+    ├── adapter/<br>
+    │   ├── <span class="checkmark">✓</span> SimulatorAdapter.java   <span style="color: #667eea;"># ADAPTER 1</span><br>
+    │   ├── <span class="checkmark">✓</span> ArduinoAdapter.java     <span style="color: #667eea;"># ADAPTER 2</span><br>
+    │   ├── <span class="checkmark">✓</span> FileEventLogger.java    <span style="color: #667eea;"># ADAPTER 3</span><br>
+    │   └── SerialPortManager.java  <span style="color: #666;"># Gestión puerto serie</span><br>
+    │<br>
+    ├── config/<br>
+    │   ├── ElevatorConfig.java<br>
+    │   └── SpringElevatorConfig.java<br>
+    │<br>
+    ├── controller/<br>
+    │   └── ElevatorRestController.java  <span style="color: #666;"># Endpoints REST</span><br>
+    │<br>
+    ├── event/<br>
+    │   ├── <span class="checkmark">✓</span> ElevatorEventListener.java      <span style="color: #667eea;"># OBSERVER (interfaz)</span><br>
+    │   ├── <span class="checkmark">✓</span> ElevatorEventBroadcaster.java   <span style="color: #667eea;"># SUBJECT</span><br>
+    │   └── <span class="checkmark">✓</span> SseElevatorEventListener.java   <span style="color: #667eea;"># CONCRETE OBSERVER</span><br>
+    │<br>
+    ├── dto/<br>
+    │   ├── ElevatorEventDTO.java<br>
+    │   ├── ElevatorStateDTO.java<br>
+    │   ├── RequestFloorDTO.java<br>
+    │   └── GenericResponseDTO.java<br>
+    │<br>
+    ├── elevator/<br>
+    │   ├── ElevatorManager.java<br>
+    │   ├── ElevatorOrchestrator.java<br>
+    │   └── ElevatorOrchestratorFactoryImpl.java<br>
+    │<br>
+    └── factory/<br>
+        └── ElevatorOrchestratorFactory.java
+                </div>
+            </section>
+
+            <!-- RESUMEN -->
+            <section class="section" id="resumen">
+                <h2>📊 6. Resumen de Implementación</h2>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Patrón</th>
+                            <th>Problema Resuelto</th>
+                            <th>Clases Clave</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Adapter</strong></td>
+                            <td>Hardware incompatible (Arduino real vs simulado)</td>
+                            <td><code>HardwarePort</code>, <code>SimulatorAdapter</code>, <code>ArduinoAdapter</code></td>
+                            <td><span class="badge badge-success">✅ Implementado</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Observer</strong></td>
+                            <td>Notificaciones en tiempo real a múltiples clientes SSE</td>
+                            <td><code>ElevatorEventListener</code>, <code>ElevatorEventBroadcaster</code>, <code>SseElevatorEventListener</code></td>
+                            <td><span class="badge badge-success">✅ Implementado</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>State</strong></td>
+                            <td>Máquina de estados del elevador con transiciones validadas</td>
+                            <td><code>ElevatorState</code>, <code>Elevator</code>, <code>Door</code>, <code>ElevatorException</code></td>
+                            <td><span class="badge badge-success">✅ Implementado</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <h3>📈 Cómo Estos Patrones Mejoran el Diseño</h3>
+
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Patrón</th>
+                            <th class="comparison-col"><span class="xmark">✗</span> Sin Patrones</th>
+                            <th class="comparison-col good"><span class="checkmark">✓</span> Con Patrones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Adapter</strong></td>
+                            <td class="comparison-col"><code>ElevatorService</code> tendría <code>if arduino / if simulator</code> por todo el código</td>
+                            <td class="comparison-col good">Cambiar de simulador a Arduino es solo cambiar <code>spring.profiles.active</code> en <code>application.properties</code></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Observer</strong></td>
+                            <td class="comparison-col"><code>ElevatorAsyncService</code> conocería cada cliente SSE y los llamaría directamente</td>
+                            <td class="comparison-col good">Agregar nuevo tipo de observador (consola, BD, email) sin modificar clases existentes</td>
+                        </tr>
+                        <tr>
+                            <td><strong>State</strong></td>
+                            <td class="comparison-col">Reglas de transición dispersas en múltiples condicionales sin control centralizado</td>
+                            <td class="comparison-col good">Todas las reglas centralizadas en <code>Elevator.java</code>, imposible ejecutar operación inválida</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="success">
+                    <strong>✅ Beneficios Clave</strong>
+                    <ul style="margin-top: 10px;">
+                        <li><strong>Mantenibilidad:</strong> Cada patrón centraliza responsabilidades específicas</li>
+                        <li><strong>Extensibilidad:</strong> Nuevo hardware o observador se agrega sin modificar código existente</li>
+                        <li><strong>Testabilidad:</strong> Interfaces claras permiten mocks y tests unitarios</li>
+                        <li><strong>Robustez:</strong> State pattern previene estados inválidos</li>
+                    </ul>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p><strong>Smart Elevator Manager</strong> | Ingeniería de Sistemas | Universidad de los Llanos | Semestre 2026-I</p>
+            <p>Patrones de Diseño: Adapter, Observer, State</p>
+        </footer>
+    </div>
+</body>
+</html>

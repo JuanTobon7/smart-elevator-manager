@@ -6,6 +6,7 @@ import co.edu.unillanos.elevator.infrastructure.adapter.ArduinoAdapter;
 import co.edu.unillanos.elevator.infrastructure.adapter.SimulatorAdapter;
 import co.edu.unillanos.elevator.infrastructure.event.ElevatorEventBroadcaster;
 import co.edu.unillanos.elevator.infrastructure.factory.ElevatorOrchestratorFactory;
+import lombok.RequiredArgsConstructor;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,20 +20,13 @@ import java.util.regex.Pattern;
  * Crea orquestadores de elevador.
  */
 @Component
+@RequiredArgsConstructor
 public class ElevatorOrchestratorFactoryImpl implements ElevatorOrchestratorFactory {
-    private static final Logger log = LoggerFactory.getLogger(ElevatorOrchestratorFactoryImpl.class);
+    private static final Logger log = LoggerFactory.getLogger(ElevatorOrchestratorFactory.class);
     private static final Pattern ELEVATOR_NUMBER_PATTERN = Pattern.compile("(\\d+)$");
 
     private final ElevatorEventBroadcaster eventBroadcaster;
     private final ObjectProvider<ArduinoAdapter> arduinoAdapterProvider;
-
-    public ElevatorOrchestratorFactoryImpl(
-            ElevatorEventBroadcaster eventBroadcaster,
-            ObjectProvider<ArduinoAdapter> arduinoAdapterProvider
-    ) {
-        this.eventBroadcaster = eventBroadcaster;
-        this.arduinoAdapterProvider = arduinoAdapterProvider;
-    }
 
     @Override
     public ElevatorOrchestrator create(String elevatorId) {

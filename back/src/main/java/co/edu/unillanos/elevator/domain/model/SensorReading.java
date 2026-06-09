@@ -14,4 +14,7 @@ public class SensorReading {
     private final int floor;
     private final DoorState doorState;
     private final ElevatorState elevatorState;
+    private boolean sensorDetected;
+    private Boolean sensorPuertaCerrada;   
+    private Boolean sensorPisoDetectado;
 }

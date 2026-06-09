@@ -198,6 +198,35 @@
   border-radius: 4px;
 }
 
+/* Estado GOING_UP — mismo color que MOVING si ya lo tienes definido */
+.status-value.GOING_UP,
+.status-value.GOING_DOWN {
+  color: var(--lcd-moving-color, #00e5ff);
+}
+
+/* Parpadeo de emergencia en la flecha de dirección */
+@keyframes emergency-blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.2; }
+}
+
+.direction-arrow.emergency-blink {
+  animation: emergency-blink 0.6s ease-in-out infinite;
+  color: var(--lcd-emergency-color, #ff3d00);
+}
+
+/* Borde del display en emergencia */
+.lcd-display.lcd-emergency {
+  border-color: var(--lcd-emergency-color, #ff3d00);
+  box-shadow: 0 0 12px var(--lcd-emergency-color, #ff3d00);
+}
+
+/* Texto de emergencia */
+.status-value.EMERGENCY_STOP,
+.status-value.EMERGENCY {
+  color: var(--lcd-emergency-color, #ff3d00);
+}
+
 .status-value {
   font-size: 0.95rem;
   letter-spacing: 1px;
