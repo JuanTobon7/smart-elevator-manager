@@ -83,6 +83,11 @@ public class ElevatorManager implements ElevatorManagementPort {
         return getOrCreateOrchestrator(elevatorId).goToFloorAsync(targetFloor);
     }
 
+    @Override
+    public CompletableFuture<ElevatorStateDTO> emergencyStopAsync(String elevatorId) {
+        ElevatorOrchestrator orchestrator = getOrchestratorById(elevatorId);
+        return orchestrator.emergencyStopAsync();
+    }
     /**
      * Abre la puerta de un elevador de forma asíncrona.
      */

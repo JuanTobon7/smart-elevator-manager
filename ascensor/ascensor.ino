@@ -1,68 +1,47 @@
-/**
- * ============================================
- * SMART ELEVATOR MANAGER - ARDUINO FIRMWARE
- * ============================================
-
- */
-
-// ============================================
-// CONFIGURACIÓN DE HARDWARE (PERSONALIZAR)
-// ============================================
-// Descomenta y configura según tu hardware
-// const int MOTOR_UP = 5;        // PWM para motor arriba
-// const int MOTOR_DOWN = 6;      // PWM para motor abajo
-// const int SENSOR_FLOOR = A0;   // Sensor de posición
-// const int SENSOR_DOOR = 7;     // Sensor de puerta
-// const int RELAY_DOOR = 8;      // Relé para puerta
-
 #include <Stepper.h>
-// ============================================
-// VARIABLES DE ESTADO
-// ============================================
-const int SENSOR_PUERTA = 13;   // MH Flying Fish — LOW: detecta objeto | HIGH: libre
-const int LED_VERDE      = 6;   // Puerta cerrada (paso bloqueado confirmado)
-const int LED_ROJO       = 3; 
 
-int currentFloor = 1;           // Piso actual (1-10)
-String doorState = "CLOSED";    // Estado puerta
-String elevatorState = "IDLE";  // Estado elevador
+const int SENSOR_PUERTA = 7;
+const int SENSOR_PISO = 13;
+const int SENSOR_ACTIVO = LOW;
+
+const int LED_PUERTA_VERDE = 4;
+const int LED_PUERTA_ROJO = 3;
+const int LED_PISO_ROJO_MOV = 5;
+const int LED_PISO_ROJO_STOP = 6;
+
+const int VELOCIDAD_NORMAL = 10;
+const int PASOS_POR_CICLO = 64;
+
+int currentFloor = 1;
+String doorState = "CLOSED";
+String elevatorState = "IDLE";
+bool emergencyStop = false;
+bool ultimoEstado;
 
 Stepper motor(2048, 8, 10, 9, 11);
-// ============================================
-// CONFIGURACIÓN INICIAL
-// ============================================
+
 void setup() {
-  // Inicializar puerto serial a 115200 baud
-  motor.setSpeed(10);
   Serial.begin(115200);
-  
+  motor.setSpeed(VELOCIDAD_NORMAL);
+
   pinMode(SENSOR_PUERTA, INPUT);
-  pinMode(LED_VERDE,     OUTPUT);
-  pinMode(LED_ROJO,      OUTPUT);
+  pinMode(SENSOR_PISO, INPUT);
+  pinMode(LED_PUERTA_VERDE, OUTPUT);
+  pinMode(LED_PUERTA_ROJO, OUTPUT);
+  pinMode(LED_PISO_ROJO_MOV, OUTPUT);
+  pinMode(LED_PISO_ROJO_STOP, OUTPUT);
 
-  // Esperar a que se estabilice la conexión
+  ultimoEstado = digitalRead(SENSOR_PISO);
   actualizarIndicadores();
-
-  delay(1000);
-  
-  
+  Serial.println("SMART ELEVATOR READY - INICIADO EN PISO 1");
 }
 
-// ============================================
-// LOOP PRINCIPAL - PROCESAR COMANDOS
-// ============================================
 void loop() {
-
   actualizarIndicadores();
 
   if (Serial.available()) {
-    // Leer hasta encontrar \n
     String command = Serial.readStringUntil('\n');
-    
-    // Eliminar espacios en blanco
     command.trim();
-    
-    // Procesar comando recibido
     if (command.length() > 0) {
       processCommand(command);
     }
@@ -70,76 +49,100 @@ void loop() {
 }
 
 void actualizarIndicadores() {
-  bool libreDeObstaculo = (digitalRead(SENSOR_PUERTA) == HIGH);
+  bool puertaCerrada = (digitalRead(SENSOR_PUERTA) == SENSOR_ACTIVO);
+  digitalWrite(LED_PUERTA_VERDE, puertaCerrada ? HIGH : LOW);
+  digitalWrite(LED_PUERTA_ROJO, puertaCerrada ? LOW : HIGH);
 
-  if (libreDeObstaculo) {
-    // Sin detección → simulamos puerta abierta
-    digitalWrite(LED_ROJO,   HIGH);
-    digitalWrite(LED_VERDE,  LOW);
-    doorState = "OPEN";
-  } else {
-    // Objeto detectado → simulamos puerta cerrada
-    digitalWrite(LED_VERDE,  HIGH);
-    digitalWrite(LED_ROJO,   LOW);
-    doorState = "CLOSED";
-  }
+  bool enPiso = (digitalRead(SENSOR_PISO) == SENSOR_ACTIVO);
+  digitalWrite(LED_PISO_ROJO_MOV, enPiso ? LOW : HIGH);
+  digitalWrite(LED_PISO_ROJO_STOP, enPiso ? HIGH : LOW);
 }
 
-// ============================================
-// PROCESAR COMANDO RECIBIDO
-// ============================================
 void processCommand(String cmd) {
-  // PING - Verificar conexión
   if (cmd == "PING") {
     Serial.println("PONG");
-  }
-  
-  // MOVE_TO_FLOOR <FLOOR> - Mover elevador
-  else if (cmd.startsWith("MOVE_TO_FLOOR")) {
+  } else if (cmd.startsWith("MOVE_TO_FLOOR")) {
     int floor = cmd.substring(14).toInt();
     moveToFloor(floor);
-  }
-  
-  // OPEN_DOOR - Abrir puerta
-  else if (cmd == "OPEN_DOOR") {
+  } else if (cmd == "OPEN_DOOR") {
     openDoor();
-  }
-  
-  // CLOSE_DOOR - Cerrar puerta
-  else if (cmd == "CLOSE_DOOR") {
+  } else if (cmd == "CLOSE_DOOR") {
     closeDoor();
-  }
-  
-  // READ_STATE - Leer estado completo
-  else if (cmd == "READ_STATE") {
+  } else if (cmd == "READ_STATE") {
     readState();
-  }
-  
-  // RESET - Resetear a estado inicial
-  else if (cmd == "RESET") {
+  } else if (cmd == "EMERGENCY_STOP") {
+    handleEmergencyStop();
+  } else if (cmd == "RESET") {
     reset();
-  }
-  
-  // Comando no reconocido
-  else {
+  } else if (cmd.startsWith("BAJAR")) {
+    int pasos = cmd.substring(6).toInt();
+    motor.setSpeed(VELOCIDAD_NORMAL);
+    Serial.print("BAJANDO ");
+    Serial.print(pasos);
+    Serial.println(" PASOS...");
+    long restantes = pasos;
+    while (restantes > 0) {
+      int bloque = min((long)PASOS_POR_CICLO, restantes);
+      motor.step(-1 * bloque);
+      restantes -= bloque;
+    }
+    Serial.println("LISTO");
+  } else if (cmd.startsWith("SUBIR")) {
+    int pasos = cmd.substring(6).toInt();
+    motor.setSpeed(VELOCIDAD_NORMAL);
+    Serial.print("SUBIENDO ");
+    Serial.print(pasos);
+    Serial.println(" PASOS...");
+    long restantes = pasos;
+    while (restantes > 0) {
+      int bloque = min((long)PASOS_POR_CICLO, restantes);
+      motor.step(1 * bloque);
+      restantes -= bloque;
+    }
+    Serial.println("LISTO");
+  } else {
     Serial.println("ERROR:001:Unknown command");
   }
 }
 
-// ============================================
-// MOVER ELEVADOR A PISO
-// ============================================
-void moveToFloor(int targetFloor) {
-
-  if (targetFloor < 1 || targetFloor > 10) {
-    Serial.println("ERROR:003:Floor out of range");
-    return;
-  }
-
+void handleEmergencyStop() {
+  emergencyStop = true;
+  elevatorState = "EMERGENCY_STOP";
+  digitalWrite(8, LOW);
+  digitalWrite(9, LOW);
+  digitalWrite(10, LOW);
+  digitalWrite(11, LOW);
   actualizarIndicadores();
-  
-  if (doorState != "CLOSED") {
-    Serial.println("ERROR:004:Door not closed");
+  Serial.println("OK:EMERGENCY_STOP");
+}
+
+int obtenerPasosExtras(int origen, int destino) {
+  if (origen == 1 && destino == 2) return 2000;
+  if (origen == 2 && destino == 3) return 2200;
+  if (origen == 1 && destino == 3) return 2200;
+  if (origen == 3 && destino == 2) return 1000;
+  if (origen == 2 && destino == 1) return 1000;
+  if (origen == 3 && destino == 1) return 1000;
+  return 0;
+}
+
+bool checkEmergencyDuringMotion() {
+  if (Serial.available()) {
+    String incoming = Serial.readStringUntil('\n');
+    incoming.trim();
+    if (incoming == "EMERGENCY_STOP") {
+      handleEmergencyStop();
+      return true;
+    } else if (incoming == "READ_STATE") {
+      readState();
+    }
+  }
+  return emergencyStop;
+}
+
+void moveToFloor(int targetFloor) {
+  if (targetFloor < 1 || targetFloor > 3) {
+    Serial.println("ERROR:003:Floor out of range");
     return;
   }
 
@@ -149,55 +152,136 @@ void moveToFloor(int targetFloor) {
     return;
   }
 
-  elevatorState = "MOVING";
-
-  int direction = (targetFloor > currentFloor) ? 1 : -1;
-  int mover_piso= 1 * 2048;
-  while (currentFloor != targetFloor) {
-    
-    // Mover un piso
-    motor.step(direction * mover_piso);  // Ajusta según tu motor
-
-    delay(2000); // 2 segundos por piso (simulación)
-
-    currentFloor += direction;
-
-    Serial.print("MOVING:NOW_AT_FLOOR_");
-    Serial.println(currentFloor);
+  int lecturasCerrada = 0;
+  for (int i = 0; i < 3; i++) {
+    if (digitalRead(SENSOR_PUERTA) == SENSOR_ACTIVO) lecturasCerrada++;
+    delay(50);
+  }
+  if (lecturasCerrada < 3) {
+    Serial.println("ERROR:004:Door not closed");
+    return;
   }
 
+  int direction = (targetFloor > currentFloor) ? 1 : -1;
+  elevatorState = (direction == 1) ? "GOING_UP" : "GOING_DOWN";
+  actualizarIndicadores();
+
+  Serial.print("STATUS:DIRECTION=");
+  Serial.println(direction == 1 ? "UP" : "DOWN");
+
+  emergencyStop = false;
+  int pisosPorRecorrer = abs(targetFloor - currentFloor);
+
+  for (int i = 0; i < pisosPorRecorrer; i++) {
+    int pisoOrigenTramo = currentFloor;
+    int pisoDestinoTramo = currentFloor + direction;
+    bool esPisoFinal = (pisoDestinoTramo == targetFloor);
+
+    // Fase 1: escape de la marca actual
+    Serial.println("STATUS:ESCAPING_CURRENT_MARKER");
+    motor.setSpeed(VELOCIDAD_NORMAL);
+
+    long pasosEscape = 500;
+    while (pasosEscape > 0) {
+      if (checkEmergencyDuringMotion()) return;
+      int bloque = min((long)PASOS_POR_CICLO, pasosEscape);
+      motor.step(direction * bloque);
+      pasosEscape -= bloque;
+      actualizarIndicadores();
+    }
+    delay(100);
+
+    ultimoEstado = digitalRead(SENSOR_PISO);
+    Serial.println("STATUS:SCANNING_FOR_NEXT_MARKER");
+
+    bool marcaEncontrada = false;
+    unsigned long inicioBusqueda = millis();
+
+    // Fase 2: buscar siguiente marca
+    while (!marcaEncontrada) {
+      if (checkEmergencyDuringMotion()) return;
+
+      motor.step(direction);
+      actualizarIndicadores();
+
+      bool estadoActual = digitalRead(SENSOR_PISO);
+
+      if (ultimoEstado == HIGH && estadoActual == LOW) {
+        Serial.print("STATUS:MARKER_DETECTED:FLOOR_");
+        Serial.println(pisoDestinoTramo);
+
+        // Fase 3: pasos extras solo en piso final
+        if (esPisoFinal) {
+          int pasosCalculados = obtenerPasosExtras(pisoOrigenTramo, pisoDestinoTramo);
+
+          if (pasosCalculados > 0) {
+            motor.setSpeed(VELOCIDAD_NORMAL);  // ← mantener velocidad normal
+
+            Serial.print("STATUS:APPLYING_EXTRA_STEPS=");
+            Serial.println(pasosCalculados);
+
+            // Re-sincronizar fases antes de bloques grandes
+            motor.step(direction * 4);
+            delay(50);
+
+            long pasosExtrasRestantes = pasosCalculados;
+            while (pasosExtrasRestantes > 0) {
+              if (checkEmergencyDuringMotion()) return;
+              int bloque = min((long)PASOS_POR_CICLO, pasosExtrasRestantes);
+              motor.step(direction * bloque);  // ← bloques de 64, no de 1
+              pasosExtrasRestantes -= bloque;
+              actualizarIndicadores();
+            }
+
+            Serial.println("STATUS:EXTRA_STEPS_DONE");
+          }
+        }
+
+        marcaEncontrada = true;
+        break;
+      }
+
+      ultimoEstado = estadoActual;
+
+      if (millis() - inicioBusqueda > 300000) {
+        Serial.println("ERROR:007:Floor marker not found timeout");
+        elevatorState = "IDLE";
+        actualizarIndicadores();
+        return;
+      }
+    }
+
+    currentFloor = pisoDestinoTramo;
+
+    if (!esPisoFinal) {
+      Serial.print("MOVING:DIRECTION=");
+      Serial.print(direction == 1 ? "UP" : "DOWN");
+      Serial.print(":NOW_AT_FLOOR_");
+      Serial.println(currentFloor);
+    }
+  }
+
+  motor.setSpeed(VELOCIDAD_NORMAL);
   elevatorState = "IDLE";
+  actualizarIndicadores();
 
   Serial.print("OK:ARRIVED:FLOOR_");
   Serial.println(currentFloor);
 }
 
-
-// ============================================
-// ABRIR PUERTA DEL ELEVADOR
-// ============================================
-//  Espera hasta que el sensor confirme vano libre (puerta abierta).
-//  Timeout de 5 s para evitar bloqueos.
-// ============================================
 void openDoor() {
   if (elevatorState != "IDLE") {
     Serial.println("ERROR:006:Elevator moving");
     return;
   }
 
-  doorState     = "OPENING";
+  doorState = "OPENING";
   elevatorState = "DOOR_OPENING";
   Serial.println("OK:DOOR_OPENING");
 
-  // Encender LED rojo anticipadamente (indicando que se está abriendo)
-  digitalWrite(LED_ROJO,  HIGH);
-  digitalWrite(LED_VERDE, LOW);
-
-  // ── Aquí iría el control real del actuador de puerta ──
-
-  // Esperar confirmación del sensor (timeout 5 s)
   unsigned long inicio = millis();
-  while (digitalRead(SENSOR_PUERTA) == LOW) {   // Mientras siga detectando objeto
+  while (digitalRead(SENSOR_PUERTA) == SENSOR_ACTIVO) {
+    actualizarIndicadores();
     if (millis() - inicio > 5000) {
       Serial.println("ERROR:006:Timeout opening door");
       elevatorState = "IDLE";
@@ -207,33 +291,20 @@ void openDoor() {
     delay(50);
   }
 
-  // Sensor confirma: vano libre → puerta abierta
-  doorState     = "OPEN";
+  doorState = "OPEN";
   elevatorState = "DOOR_OPEN";
-  digitalWrite(LED_ROJO,  HIGH);
-  digitalWrite(LED_VERDE, LOW);
+  actualizarIndicadores();
+  Serial.println("OK:DOOR_OPEN");
 }
 
-// ============================================
-// CERRAR PUERTA DEL ELEVADOR
-// ============================================
-//  Espera hasta que el sensor detecte objeto (puerta cerrada).
-//  Timeout de 5 s para evitar bloqueos.
-// ============================================
 void closeDoor() {
-  doorState     = "CLOSING";
+  doorState = "CLOSING";
   elevatorState = "DOOR_CLOSING";
   Serial.println("OK:DOOR_CLOSING");
 
-  // Encender LED verde anticipadamente (indicando que se está cerrando)
-  digitalWrite(LED_VERDE, HIGH);
-  digitalWrite(LED_ROJO,  LOW);
-
-  // ── Aquí iría el control real del actuador de puerta ──
-
-  // Esperar confirmación del sensor (timeout 5 s)
   unsigned long inicio = millis();
-  while (digitalRead(SENSOR_PUERTA) == HIGH) {  // Mientras NO detecte objeto
+  while (digitalRead(SENSOR_PUERTA) != SENSOR_ACTIVO) {
+    actualizarIndicadores();
     if (millis() - inicio > 5000) {
       Serial.println("ERROR:006:Timeout closing door");
       elevatorState = "IDLE";
@@ -243,93 +314,35 @@ void closeDoor() {
     delay(50);
   }
 
-  // Sensor confirma: objeto detectado → puerta cerrada
-  doorState     = "CLOSED";
+  doorState = "CLOSED";
   elevatorState = "IDLE";
-  digitalWrite(LED_VERDE, HIGH);
-  digitalWrite(LED_ROJO,  LOW);
+  actualizarIndicadores();
+  Serial.println("OK:DOOR_CLOSED");
 }
 
-// ============================================
-// LEER ESTADO ACTUAL DEL ELEVADOR
-// ============================================
 void readState() {
-  // Formato: STATE:FLOOR=X,DOOR_STATE=Y,ELEVATOR_STATE=Z\n
   actualizarIndicadores();
+  bool puertaCerrada = (digitalRead(SENSOR_PUERTA) == SENSOR_ACTIVO);
+  bool enPiso = (digitalRead(SENSOR_PISO) == SENSOR_ACTIVO);
 
   Serial.print("STATE:FLOOR=");
   Serial.print(currentFloor);
   Serial.print(",DOOR_STATE=");
   Serial.print(doorState);
   Serial.print(",ELEVATOR_STATE=");
-  Serial.println(elevatorState);
+  Serial.print(elevatorState);
+  Serial.print(",SENSOR_PUERTA=");
+  Serial.print(puertaCerrada ? "CLOSED" : "OPEN");
+  Serial.print(",SENSOR_PISO=");
+  Serial.println(enPiso ? "AT_FLOOR" : "MOVING");
 }
 
-// ============================================
-// RESETEAR A ESTADO INICIAL
-// ============================================
 void reset() {
-  // Volver a estado inicial
+  emergencyStop = false;
   currentFloor = 1;
   doorState = "CLOSED";
   elevatorState = "IDLE";
-  
-  
+  motor.step(0);
   actualizarIndicadores();
-
-  // Enviar confirmación
   Serial.println("OK:RESET_COMPLETE");
 }
-
-// ============================================
-// FUNCIONES AUXILIARES (PERSONALIZAR)
-// ============================================
-
-/**
- * Leer posición actual del elevador desde sensor
- * Descomentar cuando tengas sensor conectado
- */
-// int getFloorFromSensor() {
-//   int sensorValue = analogRead(SENSOR_FLOOR);
-//   // Mapear valor analógico (0-1023) a piso (1-10)
-//   return map(sensorValue, 0, 1023, 1, 10);
-// }
-
-/**
- * Verificar si puerta está abierta
- * Descomentar cuando tengas sensor de puerta
- */
-// boolean isDoorOpen() {
-//   return digitalRead(SENSOR_DOOR) == HIGH;
-// }
-
-/**
- * Mover motor hacia arriba
- * Descomentar cuando tengas motor conectado
- */
-// void moveMotorUp() {
-//   digitalWrite(MOTOR_DOWN, LOW);
-//   analogWrite(MOTOR_UP, 255);  // Velocidad máxima
-// }
-
-/**
- * Mover motor hacia abajo
- * Descomentar cuando tengas motor conectado
- */
-// void moveMotorDown() {
-//   digitalWrite(MOTOR_UP, LOW);
-//   analogWrite(MOTOR_DOWN, 255);  // Velocidad máxima
-// }
-
-/**
- * Detener motor
- * Descomentar cuando tengas motor conectado
- */
-// void stopMotor() {
-//   digitalWrite(MOTOR_UP, LOW);
-//   digitalWrite(MOTOR_DOWN, LOW);
-// }
-
-// ============================================
-// FIN DEL CÓDIGO
-// ============================================

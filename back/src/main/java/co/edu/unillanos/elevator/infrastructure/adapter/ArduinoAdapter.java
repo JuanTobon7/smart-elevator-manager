@@ -97,74 +97,102 @@ public class ArduinoAdapter implements HardwarePort {
         }
     }
 
+    
     @Override
     public SensorReading readState() throws InterruptedException {
         ensureInitialized();
-
-        try {
-            String response = serialPortManager.sendCommand("READ_STATE");
-            return parseStateResponse(response);
-        } catch (ArduinoTimeoutException e) {
-            log.error("Timeout leyendo estado de Arduino", e);
-            throw new RuntimeException("Timeout: " + e.getMessage(), e);
-        } catch (ArduinoException e) {
-            log.error("Error leyendo estado de Arduino", e);
-            throw new RuntimeException("Error de Arduino: " + e.getMessage(), e);
+        int attempts = 0;
+        
+        while (attempts < 5) {
+            try {
+                String response = serialPortManager.sendCommand("READ_STATE");
+                
+                if (response == null || response.trim().isEmpty()) {
+                    attempts++;
+                    continue;
+                }
+                
+                if (response.startsWith("STATUS:") || response.startsWith("MOVING:") 
+                    || response.startsWith("OK:ARRIVED") || response.startsWith("ERROR:007")) {
+                    Thread.sleep(150); // Damos un respiro al Arduino
+                    attempts++;
+                    continue; 
+                }
+                
+                return parseStateResponse(response);
+                
+            } catch (ArduinoTimeoutException e) {
+                log.error("Timeout leyendo estado de Arduino", e);
+                throw new RuntimeException("Timeout: " + e.getMessage(), e);
+            } catch (ArduinoException e) {
+                log.warn("Fragmento serial corrupto, limpiando y reintentando... ({})", e.getMessage());
+                attempts++;
+                Thread.sleep(200);
+            }
         }
+        
+        throw new RuntimeException("No se pudo obtener un estado limpio de hardware después de 5 intentos");
     }
 
-        @Override
+    @Override
     public void moveToFloor(int floor) {
         ensureInitialized();
 
         if (floor < 1 || floor > 10) {
             throw new IllegalArgumentException("Piso debe estar entre 1 y 10");
         }
-        
-        // Pre-verificar puerta (igual que antes)
+
         try {
             SensorReading currentState = readState();
-            if (currentState.getDoorState() != DoorState.CLOSED) {
+            boolean puertaCerrada;
+            if (currentState.getSensorPuertaCerrada() != null) {
+                puertaCerrada = currentState.getSensorPuertaCerrada();
+            } else {
+                puertaCerrada = currentState.getDoorState() == DoorState.CLOSED;
+                log.warn("SENSOR_PUERTA no disponible, usando DOOR_STATE como fallback");
+            }
+            if (!puertaCerrada) {
                 throw new IllegalStateException(
-                    "Puerta no está cerrada (estado actual: "
-                    + currentState.getDoorState() + ")."
+                    "Movimiento bloqueado: sensor físico detecta puerta abierta"
                 );
             }
         } catch (IllegalStateException e) {
             throw e;
         } catch (Exception e) {
-            log.warn("No se pudo pre-verificar estado de puerta: {}", e.getMessage());
+            log.warn("No se pudo verificar estado de puerta: {}", e.getMessage());
         }
-        
 
         try {
             log.info("Solicitando movimiento a piso {} al Arduino", floor);
 
-            // ← CLAVE: usar sendCommandAwaitFinal, no sendCommand
-            // Este método bloquea hasta recibir OK:ARRIVED o ERROR:
-            String response = serialPortManager.sendCommandAwaitFinal("MOVE_TO_FLOOR " + floor);
+           
+            flushInputBuffer();
 
-            if (response.startsWith("OK:ARRIVED")) {
-                log.info("Elevador confirmó llegada al piso {}: {}", floor, response);
-            } else if (response.startsWith("OK:ALREADY_AT")) {
+            String response = serialPortManager.sendCommand("MOVE_TO_FLOOR " + floor);
+            log.info("Respuesta inicial a MOVE_TO_FLOOR {}: {}", floor, response);
+
+            
+            if (response.contains("ALREADY_AT") || response.contains("OK:ALREADY_AT")) {
                 log.info("Elevador ya estaba en piso {}", floor);
-            } else {
-                log.warn("Respuesta inesperada al llegar a piso {}: {}", floor, response);
+                return; // único caso donde no hace falta polling
             }
+
+           
+            waitForFloor(floor);
 
         } catch (ArduinoTimeoutException e) {
             log.error("Timeout moviendo a piso {}", floor, e);
             throw new RuntimeException("Timeout: " + e.getMessage(), e);
         } catch (ArduinoException e) {
             if (e.getMessage().contains("004") || e.getMessage().contains("Door not closed")) {
-                throw new IllegalStateException("Puerta no cerrada confirmada por Arduino", e);
+                log.warn("Arduino rechazó movimiento por puerta: {}", e.getMessage());
+                throw new RuntimeException("Puerta no confirmada por Arduino: " + e.getMessage(), e);
             }
             log.error("Error moviendo a piso {}", floor, e);
             throw new RuntimeException("Error de Arduino: " + e.getMessage(), e);
         }
     }
     
-    // ← NUEVO: parada de emergencia
     @Override
     public void emergencyStop() {
         ensureInitialized();
@@ -180,8 +208,7 @@ public class ArduinoAdapter implements HardwarePort {
                 log.error("Respuesta inesperada a EMERGENCY_STOP: {}", response);
             }
         } catch (ArduinoTimeoutException e) {
-            // En emergencia el timeout es aceptable — el Arduino puede ya
-            // haber cortado el motor antes de responder
+            
             log.warn("Timeout en respuesta a EMERGENCY_STOP (puede ser normal): {}", e.getMessage());
         } catch (ArduinoException e) {
             log.error("Error enviando EMERGENCY_STOP", e);
@@ -189,7 +216,7 @@ public class ArduinoAdapter implements HardwarePort {
         }
     }
 
-    // ← NUEVO: polling hasta confirmar EMERGENCY_STOP en estado
+    
     private void waitForEmergencyStop() {
         long deadline = System.currentTimeMillis() + 5000;
 
@@ -288,7 +315,20 @@ public class ArduinoAdapter implements HardwarePort {
             try {
                 SensorReading reading = readState();
 
-                if (reading.getDoorState() == expected) {
+                // Si el sensor no llegó, confiar en el doorState lógico
+                Boolean puertaCerrada = reading.getSensorPuertaCerrada();
+
+                boolean sensorConfirma;
+                if (puertaCerrada != null) {
+                    sensorConfirma = (expected == DoorState.CLOSED)
+                            ? puertaCerrada
+                            : !puertaCerrada;
+                } else {
+                    sensorConfirma = reading.getDoorState() == expected;
+                    log.warn("SENSOR_PUERTA no disponible en polling, usando DoorState");
+                }
+
+                if (sensorConfirma) {
                     log.info("Puerta confirmada en estado: {}", expected);
                     return;
                 }
@@ -320,9 +360,15 @@ public class ArduinoAdapter implements HardwarePort {
         }
     }
 
-    // ← MODIFICADO: acepta GOING_UP, GOING_DOWN y EMERGENCY_STOP además de los anteriores
+    
     private SensorReading parseStateResponse(String response) throws ArduinoException {
         try {
+            
+            if (response.startsWith("STATUS:") || response.startsWith("MOVING:") 
+                || response.startsWith("OK:ARRIVED") || response.startsWith("ERROR:007")) {
+                throw new ArduinoException("STATUS_ASYNC_IGNORABLE");
+            }
+            
             if (!response.startsWith("STATE:")) {
                 throw new ArduinoException("Formato de respuesta inválido: " + response);
             }
@@ -345,17 +391,34 @@ public class ArduinoAdapter implements HardwarePort {
                 elevatorState = ElevatorState.IDLE;
             }
 
-            // ← NUEVO: leer SENSOR si está presente (compatible con firmware sin el campo)
+            Boolean sensorPuertaCerrada = null;
+            Boolean sensorPisoDetectado = null;
             boolean sensorDetected = false;
-            if (parts.length >= 4) {
+
+            if (parts.length == 4) {
+                
                 sensorDetected = "DETECTED".equals(parts[3].split("=")[1]);
+
+            } else if (parts.length >= 5) {
+                
+                String puertaVal = parts[3].split("=")[1];  
+                sensorPuertaCerrada = "CLOSED".equals(puertaVal);
+
+                String pisoVal = parts[4].split("=")[1];   
+                sensorPisoDetectado = "AT_FLOOR".equals(pisoVal);
+
+                
+                sensorDetected = sensorPisoDetectado;
             }
+
 
             return SensorReading.builder()
                     .floor(floor)
                     .doorState(doorState)
                     .elevatorState(elevatorState)
-                    .sensorDetected(sensorDetected)  // ← NUEVO
+                    .sensorDetected(sensorDetected)
+                    .sensorPuertaCerrada(sensorPuertaCerrada)
+                    .sensorPisoDetectado(sensorPisoDetectado)
                     .build();
 
         } catch (Exception e) {
@@ -363,11 +426,9 @@ public class ArduinoAdapter implements HardwarePort {
         }
     }
 
-    // ← MODIFICADO: también termina si el Arduino entra en EMERGENCY_STOP
-   // ← MODIFICADO en ArduinoAdapter.java: aislar errores transitorios del Arduino
-    // que llegan como líneas sueltas en el buffer durante el polling
+    
     private void waitForFloor(int targetFloor) {
-        int maxRetries = 60;
+        int maxRetries = 300;
         int retry      = 0;
 
         while (retry < maxRetries) {
@@ -387,7 +448,7 @@ public class ArduinoAdapter implements HardwarePort {
 
                 if (reading.getElevatorState() == ElevatorState.GOING_UP
                         || reading.getElevatorState() == ElevatorState.GOING_DOWN) {
-                    log.debug("En tránsito {} → piso actual: {}, destino: {}",
+                    log.debug("En transito {} → piso actual: {}, destino: {}",
                             reading.getElevatorState(), reading.getFloor(), targetFloor);
                 }
 
@@ -399,15 +460,15 @@ public class ArduinoAdapter implements HardwarePort {
                 Thread.currentThread().interrupt();
                 return;
             } catch (RuntimeException e) {
-                // ← MODIFICADO: distinguir errores transitorios del Arduino (líneas
-                // ERROR:008 sueltas en el buffer) de fallos reales de comunicación.
-                // Los errores de timeout de piso son del Arduino hacia sí mismo —
-                // el backend debe ignorarlos y seguir leyendo el estado real.
                 String msg = e.getMessage() != null ? e.getMessage() : "";
-                if (msg.contains("008") || msg.contains("Timeout reaching floor")
+                
+                // Si el Arduino mandó un aviso de progreso, simplemente lo ignoramos y seguimos esperando
+                if (msg.contains("STATUS_ASYNC_IGNORABLE")) {
+                    log.debug("Recibido evento asíncrono del Arduino, continuando polling...");
+                } 
+                else if (msg.contains("008") || msg.contains("Timeout reaching floor")
                         || msg.contains("007") || msg.contains("Timeout leaving floor")) {
                     log.warn("Error transitorio de Arduino en polling (ignorado): {}", msg);
-                    // Limpiar buffer por si quedaron bytes residuales
                     flushInputBuffer();
                 } else {
                     log.warn("Error durante polling de estado: {}", msg);

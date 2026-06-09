@@ -2,11 +2,22 @@ import React, { useState, useEffect } from 'react'
 import './ElevatorPanel.css'
 import ControlKeyboard from './ControlKeyboard'
 import CabinIndicator from './CabinIndicator'
-// ← LCDDisplay eliminado
 
-function ElevatorPanel({ elevator, onRequestFloor, onOpenDoor, onCloseDoor }) {
+function ElevatorPanel({ elevator, warning, onRequestFloor, onOpenDoor, onCloseDoor, onEmergencyStop }) {
   const [requestedFloors, setRequestedFloors] = useState([])
-  const [doorState, setDoorState] = useState('closed')
+
+  useEffect(() => {
+    if (!elevator) return
+    setRequestedFloors([])
+  }, [elevator?.id])
+
+  useEffect(() => {
+    if (!elevator) return
+    if (elevator.destinationFloor !== null &&
+      elevator.currentFloor === elevator.destinationFloor) {
+      setRequestedFloors(prev => prev.filter(f => f !== elevator.currentFloor))
+    }
+  }, [elevator?.currentFloor])
 
   if (!elevator) {
     return (
@@ -18,19 +29,26 @@ function ElevatorPanel({ elevator, onRequestFloor, onOpenDoor, onCloseDoor }) {
     )
   }
 
-  useEffect(() => {
-    setDoorState(elevator.status === 'DOOR_OPEN' ? 'open' : 'closed')
-  }, [elevator.status])
+  // Si hay warning activo, el movimiento fue rechazado — mostrar IDLE
+  const effectiveStatus = warning && (
+    elevator.status === 'GOING_UP' ||
+    elevator.status === 'GOING_DOWN' ||
+    elevator.status === 'MOVING'
+  ) ? 'IDLE' : elevator.status
 
-  useEffect(() => {
-    setRequestedFloors([])
-  }, [elevator.id])
-
-  useEffect(() => {
-    if (elevator.destinationFloor !== null && elevator.currentFloor === elevator.destinationFloor) {
-      setRequestedFloors(prev => prev.filter(floor => floor !== elevator.currentFloor))
+  const doorState = (() => {
+    switch (effectiveStatus) {
+      case 'DOOR_OPEN':    return 'open'
+      case 'DOOR_OPENING': return 'opening'
+      case 'DOOR_CLOSING': return 'closing'
+      default:             return 'closed'
     }
-  }, [elevator.currentFloor])
+  })()
+
+  const isMoving =
+    effectiveStatus === 'MOVING' ||
+    effectiveStatus === 'GOING_UP' ||
+    effectiveStatus === 'GOING_DOWN'
 
   const handleFloorRequest = (floor) => {
     if (!requestedFloors.includes(floor)) {
@@ -39,53 +57,44 @@ function ElevatorPanel({ elevator, onRequestFloor, onOpenDoor, onCloseDoor }) {
     onRequestFloor(floor)
   }
 
-  const handleOpenDoor = () => {
-    setDoorState('opening')
-    onOpenDoor()
-    setTimeout(() => setDoorState('open'), 300)
-  }
-
-  const handleCloseDoor = () => {
-    setDoorState('closing')
-    setTimeout(() => setDoorState('closed'), 1000)
-    onCloseDoor()
-  }
-
   return (
     <div className="elevator-panel">
+      {warning && (
+        <div className="panel-warning">
+          <span>⚠️ {warning}</span>
+        </div>
+      )}
+
       <div className="panel-container">
-        {/* Panel izquierdo - CabinIndicator reemplaza LCDDisplay */}
         <div className="panel-section display-section">
           <CabinIndicator
             currentFloor={elevator.currentFloor}
-            elevatorState={elevator.status}
+            elevatorState={effectiveStatus}
             sensorDetected={elevator.sensorDetected ?? false}
-            destinationFloor={elevator.destinationFloor}
+            destinationFloor={warning ? null : elevator.destinationFloor}
+            sensorPisoDetectado={elevator.sensorPisoDetectado}
+            sensorPuertaCerrada={elevator.sensorPuertaCerrada}
           />
         </div>
 
-        {/* Panel derecho - Controles */}
         <div className="panel-section control-section">
           <ControlKeyboard
             requestedFloors={requestedFloors}
             onFloorRequest={handleFloorRequest}
-            onOpenDoor={handleOpenDoor}
-            onCloseDoor={handleCloseDoor}
+            onOpenDoor={onOpenDoor}
+            onCloseDoor={onCloseDoor}
+            onEmergencyStop={onEmergencyStop}
             doorState={doorState}
-            isMoving={
-              elevator.status === 'MOVING' ||
-              elevator.status === 'GOING_UP' ||
-              elevator.status === 'GOING_DOWN'
-            }
-            isDoorOpen={elevator.status === 'DOOR_OPEN'}
+            isMoving={isMoving}
+            isDoorOpen={effectiveStatus === 'DOOR_OPEN'}
           />
         </div>
       </div>
 
       <div className="panel-status">
-        <div className={`status-indicator ${elevator.status?.toLowerCase()}`}>
+        <div className={`status-indicator ${effectiveStatus?.toLowerCase()}`}>
           <span className="status-dot"></span>
-          <span className="status-text">{elevator.status}</span>
+          <span className="status-text">{effectiveStatus}</span>
         </div>
       </div>
     </div>

@@ -15,4 +15,6 @@ public class SensorReading {
     private final DoorState doorState;
     private final ElevatorState elevatorState;
     private boolean sensorDetected;
+    private Boolean sensorPuertaCerrada;   
+    private Boolean sensorPisoDetectado;
 }

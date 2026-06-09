@@ -74,18 +74,29 @@ public class ElevatorOrchestrator {
                     // 3. Ejecutar en hardware — bloquea hasta llegar o timeout
                     hardwarePort.moveToFloor(targetFloor);
 
-                    // 4. ← MODIFICADO: verificar que realmente llegó antes de marcar ARRIVED
+                    // Pequeña pausa para que el Arduino estabilice el estado final
+                    try {
+                        Thread.sleep(300);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt(); // restaurar flag de interrupción
+                        log.warn("[{}] Sleep interrumpido esperando estabilización del hardware", elevatorId);
+                    }
+
+
+                    // 4. Verificar llegada
                     SensorReading finalState = syncDomainWithHardware();
 
                     if (finalState.getFloor() == targetFloor
-                            && finalState.getElevatorState() == ElevatorState.IDLE) {
+                        && (finalState.getElevatorState() == ElevatorState.IDLE
+                            || finalState.getElevatorState() == ElevatorState.GOING_UP   // por si acaba de parar
+                            || finalState.getElevatorState() == ElevatorState.GOING_DOWN)) {
                         elevator.arriveAtFloor();
                         broadcast("ARRIVED", "Elevador llegó al piso " + targetFloor);
                         log.info("[{}] Elevador llegó al piso {}", elevatorId, targetFloor);
                     } else {
                         // El hardware reporta un piso distinto — timeout real
                         String msg = String.format(
-                            "Timeout: se esperaba piso %d, hardware reporta piso %d (estado: %s)",
+                            "Error: se esperaba piso %d, hardware reporta piso %d (estado: %s)",
                             targetFloor, finalState.getFloor(), finalState.getElevatorState()
                         );
                         log.warn("[{}] {}", elevatorId, msg);
@@ -116,7 +127,7 @@ public class ElevatorOrchestrator {
         });
     }
 
-    // ── MODIFICADO: hardware primero, luego sincronizar dominio ──
+    
     public CompletableFuture<ElevatorStateDTO> openDoorAsync() {
         return CompletableFuture.supplyAsync(() -> {
             synchronized (lock) {
@@ -221,10 +232,34 @@ public class ElevatorOrchestrator {
         });
     }
 
-    /**
-     * Lee el estado real del hardware y actualiza el dominio en consecuencia.
-     * ← NUEVO: método central de sincronización — llamar antes de cualquier operación.
-     */
+    
+    public CompletableFuture<ElevatorStateDTO> emergencyStopAsync() {
+        return CompletableFuture.supplyAsync(() -> {
+            synchronized (lock) {
+                try {
+                    log.warn("[{}] Ejecutando parada de emergencia", elevatorId);
+
+                    // Enviar al hardware inmediatamente — no esperar sincronización
+                    hardwarePort.emergencyStop();
+
+                    // Actualizar dominio
+                    elevator.setEmergencyStop();
+
+                    broadcast("EMERGENCY_STOP", "Parada de emergencia activada");
+                    log.warn("[{}] Parada de emergencia confirmada", elevatorId);
+
+                    return ElevatorStateDTO.from(elevatorId, elevator);
+
+                } catch (RuntimeException e) {
+                    log.error("[{}] Error ejecutando parada de emergencia: {}", elevatorId, e.getMessage(), e);
+                    emitErrorEvent(e.getMessage());
+                    throw new CompletionException(e);
+                }
+            }
+        });
+    }
+
+
     private SensorReading syncDomainWithHardware() {
         try {
             SensorReading reading = hardwarePort.readState();

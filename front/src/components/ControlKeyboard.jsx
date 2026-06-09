@@ -6,6 +6,7 @@ function ControlKeyboard({
   onFloorRequest,
   onOpenDoor,
   onCloseDoor,
+  onEmergencyStop,
   doorState,
   isMoving,
   isDoorOpen
@@ -18,8 +19,6 @@ function ControlKeyboard({
       setPressedButton(floor)
       onFloorRequest(floor)
       setTimeout(() => setPressedButton(null), 200)
-      
-      // Sonido opcional
       playBeep()
     }
   }
@@ -30,6 +29,8 @@ function ControlKeyboard({
       onOpenDoor()
     } else if (action === 'close') {
       onCloseDoor()
+    } else if (action === 'emergency') {
+      onEmergencyStop?.()
     }
     setTimeout(() => setPressedButton(null), 200)
     playBeep()

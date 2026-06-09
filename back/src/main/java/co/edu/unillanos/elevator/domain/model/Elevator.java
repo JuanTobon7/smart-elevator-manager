@@ -241,4 +241,9 @@ public class Elevator {
         door.close();
         this.state = ElevatorState.IDLE;
     }
+    
+    public void setEmergencyStop() {
+        this.state = ElevatorState.EMERGENCY_STOP;
+        
+    }
 }

@@ -29,6 +29,8 @@ public interface ElevatorManagementPort {
     CompletableFuture<ElevatorStateDTO> openDoorAsync(String elevatorId);
     
     CompletableFuture<ElevatorStateDTO> closeDoorAsync(String elevatorId);
+
+    CompletableFuture<ElevatorStateDTO> emergencyStopAsync(String elevatorId);
     
     CompletableFuture<ElevatorStateDTO> resetAsync(String elevatorId);
     

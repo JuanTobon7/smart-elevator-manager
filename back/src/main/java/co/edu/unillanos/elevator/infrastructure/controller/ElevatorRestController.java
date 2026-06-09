@@ -205,4 +205,30 @@ public class ElevatorRestController {
 
         return emitter;
     }
+    
+    @PostMapping(value = "/{id}/emergency-stop", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<GenericResponseDTO<ElevatorStateDTO>> emergencyStop(@PathVariable String id) {
+        try {
+            log.warn("Parada de emergencia solicitada para elevador: {}", id);
+
+            elevatorManagementPort.emergencyStopAsync(id)
+                    .exceptionally(ex -> {
+                        log.error("Error en parada de emergencia de {}: {}", id, ex.getMessage());
+                        return null;
+                    });
+
+            ElevatorStateDTO state = elevatorManagementPort.getElevatorState(id);
+            return ResponseEntity.accepted().body(
+                    GenericResponseDTO.ok(state, "Parada de emergencia ejecutada")
+            );
+        } catch (ElevatorException e) {
+            log.error("Error de elevador {}: {}", id, e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(GenericResponseDTO.error("Error de elevador: " + e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error en parada de emergencia de {}: {}", id, e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(GenericResponseDTO.error("Error en parada de emergencia: " + e.getMessage()));
+        }
+    }
 }

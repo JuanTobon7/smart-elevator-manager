@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import './LCDDisplay.css'
 
 function LCDDisplay({ currentFloor, destinationFloor, status, direction, weight }) {
-  const [displayFloor, setDisplayFloor] = useState(currentFloor || 0)
+  const [displayFloor, setDisplayFloor] = useState(currentFloor ?? 1)
   const [isFlipping, setIsFlipping] = useState(false)
 
   useEffect(() => {
@@ -16,8 +16,7 @@ function LCDDisplay({ currentFloor, destinationFloor, status, direction, weight 
     }
   }, [currentFloor])
 
-  // ← MODIFICADO: GOING_UP / GOING_DOWN vienen directo del estado;
-  // direction sigue funcionando como fallback si el backend lo envía por separado
+  
   const getDirectionArrow = () => {
     const normalized = status?.toUpperCase()
 
@@ -43,7 +42,6 @@ function LCDDisplay({ currentFloor, destinationFloor, status, direction, weight 
       case 'DOOR_CLOSING':    return 'CERRANDO PUERTA'
       case 'EMERGENCY_STOP':  return '⚠ EMERGENCIA'
       case 'ERROR':           return '✕ ERROR'
-      // Compatibilidad con estados legacy del backend
       case 'MOVING':          return 'EN MOVIMIENTO'
       case 'EMERGENCY':       return '⚠ EMERGENCIA'
       default:                return status ?? '---'

@@ -19,7 +19,10 @@ class ElevatorService {
       direction,
       weight: 0,
       doorStatus: apiElevator.doorStatus?.toLowerCase() || 'closed',
-      sensorDetected: apiElevator.sensorDetected ?? false  // ← NUEVO
+      sensorDetected: apiElevator.sensorDetected ?? false,
+      sensorPuertaCerrada: apiElevator.sensorPuertaCerrada ?? null,
+      sensorPisoDetectado: apiElevator.sensorPisoDetectado ?? null
+
     }
   }
 
@@ -150,11 +153,10 @@ class ElevatorService {
         try {
           const elevator = await this.getElevatorById(elevatorId)
           if (elevator) {
-            callback(elevator)
-            // Parar polling cuando llegue a destino
+            callback(elevator, 'POLL', null)
             if (elevator.status === 'IDLE' || elevator.status === 'ARRIVED') {
               stopPolling()
-              connect() // reconectar SSE
+              connect()
             }
           }
         } catch (e) {
@@ -185,6 +187,13 @@ class ElevatorService {
           const parsedData = JSON.parse(event.data)
           console.log(`[SSE] Evento recibido: ${event.type}`, parsedData)
 
+          if (event.type === 'VALIDATION_ERROR' || event.type === 'ERROR') {
+            const errorMessage = parsedData.message || 'Error desconocido'
+            stopPolling()  
+            callback(null, event.type, errorMessage)
+            return
+          }
+
           let elevatorData = parsedData
           if (parsedData.state) {
             elevatorData = parsedData.state
@@ -194,17 +203,10 @@ class ElevatorService {
           }
 
           const transformed = this.transformElevator(elevatorData)
-          callback(transformed)
+          callback(transformed, event.type, null)
 
-          // Si empieza a moverse, activar polling como respaldo
-          if (event.type === 'MOVING') {
-            startPolling()
-          }
-
-          // Si llegó, parar polling
-          if (event.type === 'ARRIVED') {
-            stopPolling()
-          }
+          if (event.type === 'MOVING') startPolling()
+          if (event.type === 'ARRIVED') stopPolling()
 
         } catch (error) {
           console.error('[SSE] Error parseando:', error)
@@ -287,6 +289,19 @@ class ElevatorService {
   static getMockElevator(elevatorId) {
     const elevators = this.getMockElevators()
     return elevators.find(e => e.id === elevatorId) || elevators[0]
+  }
+
+  static async emergencyStop(elevatorId) {
+    try {
+      const response = await fetch(
+        `${this.BASE_URL}/elevators/${elevatorId}/emergency-stop`,
+        { method: 'POST' }
+      )
+      if (!response.ok) throw new Error('Failed to trigger emergency stop')
+      return await response.json()
+    } catch (error) {
+      console.error('Error triggering emergency stop:', error)
+    }
   }
 }
 

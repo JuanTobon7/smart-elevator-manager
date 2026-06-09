@@ -158,6 +158,36 @@ body {
   transform: scale(0.95);
 }
 
+.warning-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background-color: #7c3f00;
+  border-top: 1px solid #c16a00;
+  color: #ffd280;
+  padding: 10px 20px;
+  font-size: 14px;
+  animation: slideDown 0.2s ease-out;
+}
+
+.warning-text { flex: 1; }
+
+.warning-close {
+  background: none;
+  border: none;
+  color: #ffd280;
+  cursor: pointer;
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.warning-close:hover { opacity: 1; }
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 .app-main {
   flex: 1;
   display: flex;
